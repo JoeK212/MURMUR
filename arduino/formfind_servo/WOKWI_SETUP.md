@@ -32,3 +32,15 @@ Note: this Wokwi simulation is a standalone reference — it isn't live-linked
 to FORMFIND itself (see the embed panel's own note on that). Useful for
 sanity-checking the firmware and servo wiring before you build anything, or
 as the richer visual sitting next to the abstract 3D preview.
+
+## wokwi.toml (optional — only for CLI / VS Code, not the web UI above)
+
+`wokwi.toml` in this folder isn't used by the plain wokwi.com web flow above —
+skip it if you're just clicking around in the browser. It matters if you use
+[Wokwi for VS Code](https://docs.wokwi.com/vscode/getting-started) or
+`wokwi-cli`: it enables an RFC2217 TCP server on port 4000 while the
+simulation runs, so an external script can connect to the simulated Arduino's
+serial port directly — e.g. with PySerial's `serial_for_url('rfc2217://localhost:4000', ...)`
+— and send/receive the exact same `A<angles>\n` / `S<value>\n` lines FORMFIND
+does, without a browser in the loop at all. Handy for scripting tests against
+the real firmware.

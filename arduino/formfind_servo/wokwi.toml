@@ -1,0 +1,12 @@
+[wokwi]
+version = 1
+# Only needed for Wokwi CLI / Wokwi for VS Code — the plain web UI at wokwi.com
+# doesn't use this file at all (see WOKWI_SETUP.md for that path).
+#
+# rfc2217ServerPort exposes the simulated Arduino's serial port over TCP while
+# the simulation is running, so an external program (a test script, PySerial,
+# etc.) can talk to the real firmware without going through the browser's
+# WebSerial bridge. Useful for scripting tests against formfind_servo.ino
+# directly — e.g. sending "A90,90,90,90,90,90,90,90\n" over the socket and
+# reading back the servo state, the same way FORMFIND itself would.
+rfc2217ServerPort = 4000
