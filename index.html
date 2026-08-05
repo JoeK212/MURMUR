@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<!--
+  FORMFIND
+  A field of kinetic spheres that drift through noise and resolve into shapes — inspired by ART+COM's BMW Kinetic Sculpture.
+  Joe.K · axisbim.io
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="A field of kinetic spheres that drift through noise and resolve into shapes or text.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FORMFIND">
+<meta name="theme-color" content="#0B0C0E" id="themeColorMeta">
+<title>FORMFIND</title>
+<style>
+  :root{
+    --paper: #0B0C0E;
+    --paper-deep: #060708;
+    --card: #131519;
+    --ink: #E8E9EB;
+    --ink-soft: #8A8F98;
+    --line: #23262C;
+    --accent: #7DD3FC;
+    --accent-deep: #38BDF8;
+    --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 10px 26px -12px rgba(0,0,0,0.7);
+    --font-display: 'Space Grotesk', 'Inter', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-ui: 'Inter', sans-serif;
+  }
+  :root[data-theme="dark"]{ /* dark is the only theme this tool ships with — kept for template compatibility */
+    --paper: #0B0C0E; --paper-deep: #060708; --card: #131519;
+    --ink: #E8E9EB; --ink-soft: #8A8F98; --line: #23262C;
+    --accent: #7DD3FC; --accent-deep: #38BDF8;
+  }
+
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--font-body); min-height:100vh;
+    overscroll-behavior-y:contain;
+    padding-left:env(safe-area-inset-left);
+    padding-right:env(safe-area-inset-right);
+  }
+  a{color:var(--accent);}
+  button{font-family:var(--font-ui); cursor:pointer;}
+  input, select{font-family:var(--font-ui);}
+  ::selection{background:var(--accent); color:#04121A;}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+
+  .btn{
+    font-family:var(--font-ui); font-weight:600; font-size:13px;
+    padding:10px 16px; border-radius:7px;
+    border:1.5px solid var(--ink); background:var(--ink); color:var(--paper-deep);
+  }
+  .btn.secondary{background:transparent; color:var(--ink); border-color:var(--line);}
+  .btn.accent{background:var(--accent); border-color:var(--accent); color:#04121A;}
+  .btn.ghost{background:transparent; border-color:transparent; color:var(--ink-soft); padding:6px 8px;}
+  .btn:disabled{opacity:0.4; cursor:not-allowed;}
+  .btn.active{background:var(--accent); border-color:var(--accent); color:#04121A;}
+
+  header.top{
+    padding:calc(20px + env(safe-area-inset-top)) 20px 14px;
+    text-align:center; border-bottom:1px solid var(--line);
+    position:relative;
+  }
+  header.top h1{
+    font-family:var(--font-display); margin:0; font-size:22px; letter-spacing:0.02em;
+  }
+  header.top p{
+    font-family:var(--font-ui); font-size:12px; letter-spacing:0.08em; color:var(--ink-soft);
+    margin:6px 0 0; text-transform:uppercase;
+  }
+
+  main{max-width:1100px; margin:0 auto; padding:18px 16px calc(36px + env(safe-area-inset-bottom));}
+
+  #stage{
+    position:relative; width:100%; aspect-ratio:16/10; background:var(--paper-deep);
+    border:1px solid var(--line); border-radius:10px; overflow:hidden; touch-action:none;
+  }
+  #stage canvas{display:block; width:100%; height:100%;}
+  #stageHint{
+    position:absolute; left:12px; bottom:10px; font-size:11px; color:var(--ink-soft);
+    font-family:var(--font-ui); letter-spacing:0.03em; pointer-events:none;
+    background:rgba(6,7,8,0.55); padding:4px 8px; border-radius:5px;
+  }
+
+  .panel{
+    margin-top:14px; background:var(--card); border:1px solid var(--line);
+    border-radius:10px; padding:16px;
+  }
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .row + .row{margin-top:12px;}
+  .label{
+    font-family:var(--font-ui); font-size:11px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--ink-soft); margin-right:2px; width:100%;
+  }
+  .group{display:flex; gap:6px; flex-wrap:wrap;}
+  #textInput{
+    flex:1; min-width:160px; background:var(--paper-deep); border:1.5px solid var(--line);
+    color:var(--ink); border-radius:7px; padding:10px 12px; font-size:16px;
+  }
+  input[type=range]{accent-color:var(--accent); flex:1; min-width:120px;}
+  .sliderRow{display:flex; align-items:center; gap:10px; min-width:200px;}
+  .sliderVal{font-size:12px; color:var(--ink-soft); width:34px; text-align:right;}
+
+  footer.foot{
+    text-align:center; padding:16px 12px calc(28px + env(safe-area-inset-bottom));
+    font-family:var(--font-ui); font-size:11px; letter-spacing:0.06em;
+    color:var(--ink-soft); opacity:0.8;
+  }
+
+  .toast{
+    position:fixed; bottom:calc(22px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper-deep);
+    font-family:var(--font-ui); font-size:13.5px; font-weight:600;
+    padding:12px 20px; border-radius:8px; box-shadow:var(--shadow);
+    opacity:0; pointer-events:none; transition:opacity 0.25s ease; z-index:50;
+  }
+  .toast.show{opacity:1;}
+
+  .confirm-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    display:flex; align-items:center; justify-content:center; padding:20px; z-index:60;
+  }
+  .confirm-box{background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); padding:22px; max-width:360px; width:100%;}
+  .confirm-box p{font-family:var(--font-body); font-size:15px; color:var(--ink); margin:0 0 20px; line-height:1.5;}
+  .confirm-actions{display:flex; gap:10px; justify-content:flex-end;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>FORMFIND</h1>
+  <p>714 spheres, one form-finding process</p>
+  <button class="btn ghost" id="helpBtn" style="position:absolute; top:calc(14px + env(safe-area-inset-top)); right:14px; padding:6px 10px;">Help</button>
+</header>
+
+<main id="main"></main>
+
+<footer class="foot" id="footVersion"></footer>
+<div class="toast" id="toast"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script>
+const APP_VERSION = '1.10.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+
+/* ================= Toast ================= */
+let toastTimer = null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+
+/* ================= Confirm dialog (never native confirm() — see NEW_PROJECT_TEMPLATE.md) ================= */
+function confirmDialog(message, confirmLabel = 'OK'){
+  return new Promise(resolve=>{
+    const overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = `
+      <div class="confirm-box">
+        <p>${escapeHtml(message)}</p>
+        <div class="confirm-actions">
+          <button class="btn secondary" id="confirmCancel">Cancel</button>
+          <button class="btn accent" id="confirmOk">${escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const cleanup = (result)=>{ overlay.remove(); resolve(result); };
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) cleanup(false); });
+    document.getElementById('confirmCancel').onclick = ()=>cleanup(false);
+    document.getElementById('confirmOk').onclick = ()=>cleanup(true);
+  });
+}
+
+function showHelp(){
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-box" style="max-width:560px; max-height:82vh; overflow-y:auto; text-align:left;">
+      <h2 style="font-family:var(--font-display); font-size:19px; margin:0 0 4px;">FORMFIND — help</h2>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 18px;">A field of kinetic spheres, inspired by ART+COM's BMW Kinetic Sculpture.</p>
+
+      <h3 style="font-size:14px; margin:16px 0 6px;">Camera</h3>
+      <p style="font-size:14px; line-height:1.5; margin:0;">Drag to orbit, scroll to zoom. "Auto-rotate" toggles the slow ambient spin.</p>
+
+      <h3 style="font-size:14px; margin:16px 0 6px;">Ambient loop</h3>
+      <p style="font-size:14px; line-height:1.5; margin:0;">Auto-cycles chaos → a shape (text or a preset) → chaos, forever. Speed and Turbulence sliders shape the motion in every mode.</p>
+
+      <h3 style="font-size:14px; margin:16px 0 6px;">Manual</h3>
+      <p style="font-size:14px; line-height:1.5; margin:0;">Type a word (max 12 characters) and click Resolve, or pick a preset — Circle, Car profile, Skyline, Blob. Scramble sends the field back to chaos.</p>
+
+      <h3 style="font-size:14px; margin:16px 0 6px;">Audio</h3>
+      <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Upload a file or use your microphone. The field becomes a live equalizer — bass on the left, treble on the right — with a beat detector driving a shimmer pulse across the whole grid. Rewind/play-pause/stop/forward controls appear once a source is connected (the mic gets a "Stop microphone" button instead, since there's nothing to seek on a live stream).</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;"><strong>Stems:</strong> FORMFIND doesn't separate a mixed song itself — that needs a trained model. Run your track through <a href="https://github.com/facebookresearch/demucs" target="_blank" rel="noopener">Demucs</a> (free, command-line), <a href="https://www.lalal.ai/stem-splitter/" target="_blank" rel="noopener">LALAL.AI</a>, or <a href="https://moises.ai" target="_blank" rel="noopener">Moises</a> first, then upload the resulting Vocals/Drums/Bass/Other files. Each sphere colors toward whichever stem is loudest at that column right now; the legend shows which color is which. The same transport controls move all loaded stems together, kept in sync.</p>
+
+      <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
+      <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of posts with arms swinging spheres, in elevation like the real piece, with a side/angled view toggle. It's driven by the same angle calculation the real serial connection uses, and even slew-rate-limits the motion to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Wokwi embed:</strong> paste a <a href="https://wokwi.com" target="_blank" rel="noopener">wokwi.com</a> project link to see the actual simulated board and servo parts, as wired in that project — a much richer visual reference than the 3D preview above. This is a static reference embed, not live-linked to what's on screen; Wokwi doesn't have a supported way to receive real-time data from another page.</p>
+
+      <div class="confirm-actions" style="margin-top:20px;">
+        <button class="btn accent" id="helpClose">Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const cleanup = ()=>overlay.remove();
+  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) cleanup(); });
+  document.getElementById('helpClose').onclick = cleanup;
+}
+
+/* ================= Helpers ================= */
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(s){ return escapeHtml(s); }
+
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ================= Three.js sphere-field engine ================= */
+const engine = {
+  mode: 'ambient',
+  speed: 1.0,
+  turbulence: 1.0,
+  autoRotate: true,
+  ambientTimer: 0,
+  ambientPhase: 'chaos', // 'chaos' -> 'hold-chaos' -> 'resolving' -> 'hold-shape' -> 'unresolving'
+  ambientPresetIdx: 0,
+  ready: false,
+};
+
+const GRID_COLS = 44;
+const GRID_ROWS = 22;
+const SPHERE_COUNT = GRID_COLS * GRID_ROWS;
+const AMBIENT_PRESETS = ['circle','car','skyline','blob','text'];
+const PEAK_HEIGHT = 3.2; // shared resolve/audio height scale, spheres-per-unit-Y
+
+let three = null; // holds { THREE, scene, camera, renderer, controls, categoryMeshes, dummy, ... }
+
+/* ================= Stem coloring =================
+   FORMFIND does not separate a mixed song itself — that needs a trained model
+   (Demucs, etc.) run externally. It accepts up to 4 already-separated stem
+   files and colors each sphere by whichever stem is driving its height most. */
+const STEM_KEYS = ['vocals', 'drums', 'bass', 'other'];
+const STEM_LABELS = { vocals: 'Vocals', drums: 'Drums', bass: 'Bass', other: 'Other / guitar' };
+const STEM_COLORS = { vocals: 0xE97452, drums: 0x7DD3FC, bass: 0xB98AFF, other: 0x8CE99A };
+const BASE_SPHERE_COLOR = 0xd7dbe0;
+const colTotalBuf = new Float32Array(GRID_COLS);
+const colDominantBuf = new Int8Array(GRID_COLS);
+
+/* ================= Audio-reactive engine =================
+   Beat-driven turbulence + per-column frequency-band shaping (a live equalizer
+   mapped across the grid). Works from an uploaded file, the microphone, or up
+   to 4 separated stem files (see STEM_KEYS above). */
+const audioEngine = {
+  ctx: null,
+  analyser: null,
+  freqData: null,
+  sourceNode: null,   // current MediaElementAudioSourceNode or MediaStreamAudioSourceNode
+  audioEl: null,
+  micStream: null,
+  active: false,       // true once a single (file/mic) source is connected and running
+  sourceKind: null,    // 'file' | 'mic' | 'stems'
+  bassEMA: 0,
+  beatPulse: 0,
+  beatCooldown: 0,
+  colEnergy: new Float32Array(GRID_COLS),
+  stemsActive: false,
+  stems: { vocals: null, drums: null, bass: null, other: null }, // lazily created per-stem state
+};
+
+/* ================= Hardware bridge (WebSerial -> Arduino servos) =================
+   Mirrors whatever's currently on screen — ambient, manual, or audio, whatever mode
+   is active — to a physical rig of hobby servos, one per evenly-spaced column band.
+   Chrome/Edge only (WebSerial isn't in the spec for Firefox/Safari). Protocol and
+   firmware: see arduino/formfind_servo/formfind_servo.ino. */
+const HW_HEIGHT_MIN = -2, HW_HEIGHT_MAX = 4; // practical sphere-height range across modes
+const HW_ANGLE_MIN = 20, HW_ANGLE_MAX = 160; // stay off the 0/180 end-stops
+const HW_SEND_INTERVAL_MS = 50; // ~20Hz — plenty for visible motion, easy on the Uno's serial buffer
+const hardwareEngine = {
+  connected: false,
+  servoCount: 8,
+  simulate: false,   // 3D rig preview — lets you verify the mapping/timing/motion speed with no Arduino attached
+  sensorTarget: 'off', // 'off' | 'turbulence' | 'speed' — what an incoming sensor reading drives
+  sensorLastRaw: null, // last analogRead() value received, 0-1023
+};
+
+function mapRange(v, inMin, inMax, outMin, outMax){
+  const t = (v - inMin) / (inMax - inMin);
+  return outMin + Math.max(0, Math.min(1, t)) * (outMax - outMin);
+}
+
+/* Connect/disconnect, the send loop, and the sensor read loop all live in
+   shared/hardware-bridge.js now — pulled out so any of the other generative-
+   design-tools can drive the same physical rig without re-implementing the
+   WebSerial plumbing. FORMFIND supplies its own getAngles/onSensorReading;
+   everything else is generic. Dynamically imported, same pattern as three.js
+   below, since this script isn't itself a module. */
+let hwBridge = null;
+async function ensureHwBridge(){
+  if(hwBridge) return hwBridge;
+  const { createHardwareBridge } = await import('./hardware-bridge.js');
+  hwBridge = createHardwareBridge({
+    getAngles: computeServoAngles,
+    onSensorReading: (norm, raw) => {
+      hardwareEngine.sensorLastRaw = raw;
+      applySensorReading(norm);
+      const status = document.getElementById('hwSensorStatus');
+      if(status) status.textContent = `Sensor: ${raw}/1023 (${norm.toFixed(2)})`;
+    },
+    onStatusChange: (status, message) => {
+      hardwareEngine.connected = (status === 'connected');
+      updateHardwareUi();
+      const statusEl = document.getElementById('hwStatus');
+      if(statusEl){
+        if(status === 'connected') statusEl.textContent = `Connected — driving ${hardwareEngine.servoCount} servo(s).`;
+        else if(status === 'disconnected') statusEl.textContent = 'Not connected.';
+        else if(status === 'error' && message) statusEl.textContent = message;
+      }
+      if(status === 'error' && message) toast(message);
+    },
+    sendIntervalMs: HW_SEND_INTERVAL_MS,
+  });
+  return hwBridge;
+}
+
+function applySensorReading(norm){
+  if(hardwareEngine.sensorTarget === 'turbulence'){
+    engine.turbulence = mapRange(norm, 0, 1, 0, 2);
+    const slider = document.getElementById('turbSlider'), val = document.getElementById('turbVal');
+    if(slider){ slider.value = engine.turbulence; }
+    if(val){ val.textContent = engine.turbulence.toFixed(1); }
+  } else if(hardwareEngine.sensorTarget === 'speed'){
+    engine.speed = mapRange(norm, 0, 1, 0.2, 2.5);
+    const slider = document.getElementById('speedSlider'), val = document.getElementById('speedVal');
+    if(slider){ slider.value = engine.speed; }
+    if(val){ val.textContent = engine.speed.toFixed(1); }
+  }
+}
+
+function computeServoAngles(){
+  const n = hardwareEngine.servoCount;
+  const bandWidth = GRID_COLS / n;
+  const sums = new Float32Array(n);
+  const counts = new Int32Array(n);
+  for(let i = 0; i < SPHERE_COUNT; i++){
+    const col = i % GRID_COLS;
+    const band = Math.min(n - 1, Math.floor(col / bandWidth));
+    sums[band] += state.currentY[i];
+    counts[band]++;
+  }
+  const angles = new Array(n);
+  for(let b = 0; b < n; b++){
+    const avg = counts[b] ? sums[b] / counts[b] : 0;
+    angles[b] = Math.round(mapRange(avg, HW_HEIGHT_MIN, HW_HEIGHT_MAX, HW_ANGLE_MIN, HW_ANGLE_MAX));
+  }
+  return angles;
+}
+
+const HW_SERVO_SLEW_DEG_PER_SEC = 300; // ~a typical standard hobby servo's real top speed — the sim can't move faster than hardware could
+
+let hwSim = null; // { THREE, scene, camera, renderer, container, armPivots, count, currentAngles, totalWidth, viewMode }
+
+function ensureHwSimScene(){
+  if(!three || !three.THREE) return false; // main engine not loaded yet
+  const container = document.getElementById('hwSimViewport');
+  if(!container) return false;
+  if(hwSim && hwSim.count === hardwareEngine.servoCount) return true;
+
+  const THREE = three.THREE;
+  if(hwSim){
+    hwSim.renderer.dispose();
+    container.innerHTML = '';
+  }
+
+  const w = container.clientWidth || 400, h = 170;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x060708);
+
+  const n = hardwareEngine.servoCount;
+  const spacing = 1.0;
+  const totalWidth = (n - 1) * spacing;
+  const requiredHeight = 2.3; // pedestal (1.0) + arm/sphere reach at full extension (~1.9) + margin
+  const requiredWidth = totalWidth + 1.4;
+  const aspect = w / h;
+  let camHeight = requiredHeight;
+  let camWidth = camHeight * aspect;
+  if(camWidth < requiredWidth){ camWidth = requiredWidth; camHeight = camWidth / aspect; }
+  const camera = new THREE.OrthographicCamera(-camWidth / 2, camWidth / 2, camHeight / 2, -camHeight / 2, 0.1, 20);
+
+  scene.add(new THREE.AmbientLight(0x8899aa, 0.7));
+  const key = new THREE.DirectionalLight(0xffffff, 1.0);
+  key.position.set(3, 5, 6);
+  scene.add(key);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(w, h);
+  container.appendChild(renderer.domElement);
+
+  const pedestalGeo = new THREE.CylinderGeometry(0.05, 0.06, 1.0, 8);
+  const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x23262c, metalness: 0.3, roughness: 0.7 });
+  const armGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6);
+  armGeo.translate(0, 0.45, 0); // pivot at the base end, not the center
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.6, roughness: 0.4 });
+  const sphereGeo = new THREE.SphereGeometry(0.14, 12, 10);
+  const sphereMat = new THREE.MeshStandardMaterial({ color: BASE_SPHERE_COLOR, metalness: 0.85, roughness: 0.28 });
+
+  const armPivots = [];
+  for(let i = 0; i < n; i++){
+    const x = i * spacing - totalWidth / 2;
+    const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
+    pedestal.position.set(x, 0.5, 0);
+    scene.add(pedestal);
+
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 1.0, 0);
+    scene.add(pivot);
+
+    const arm = new THREE.Mesh(armGeo, armMat);
+    pivot.add(arm);
+
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+    sphere.position.set(0, 0.9, 0);
+    pivot.add(sphere);
+
+    armPivots.push(pivot);
+  }
+
+  const prevAngles = hwSim ? hwSim.currentAngles : null;
+  const currentAngles = new Float32Array(n).fill(90);
+  if(prevAngles) currentAngles.set(prevAngles.subarray(0, Math.min(n, prevAngles.length)));
+
+  hwSim = { THREE, scene, camera, renderer, container, armPivots, count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side') };
+  setHwSimView(hwSim.viewMode);
+  return true;
+}
+
+function setHwSimView(mode){
+  if(!hwSim) return;
+  hwSim.viewMode = mode;
+  if(mode === 'angle'){
+    hwSim.camera.position.set(hwSim.totalWidth * 0.35, 2.3, 4.6);
+  } else {
+    hwSim.camera.position.set(0, 1.0, 6);
+  }
+  hwSim.camera.lookAt(0, 1.0, 0);
+  const btn = document.getElementById('hwSimViewBtn');
+  if(btn) btn.textContent = mode === 'angle' ? 'Side view' : 'Angled view';
+}
+
+function updateHwSimulator(now, dt){
+  if(!hardwareEngine.simulate) return;
+  if(!ensureHwSimScene()) return;
+  const target = computeServoAngles();
+  const maxStep = HW_SERVO_SLEW_DEG_PER_SEC * dt; // real servos can't snap instantly to a new angle
+  for(let i = 0; i < hwSim.count; i++){
+    const cur = hwSim.currentAngles[i];
+    const tgt = target[i] !== undefined ? target[i] : 90;
+    const step = Math.max(-maxStep, Math.min(maxStep, tgt - cur));
+    hwSim.currentAngles[i] = cur + step;
+    hwSim.armPivots[i].rotation.z = hwSim.THREE.MathUtils.degToRad(hwSim.currentAngles[i] - 90);
+  }
+  hwSim.renderer.render(hwSim.scene, hwSim.camera);
+}
+
+function initAudioContext(){
+  if(audioEngine.ctx) return;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  audioEngine.ctx = new Ctx();
+  audioEngine.analyser = audioEngine.ctx.createAnalyser();
+  audioEngine.analyser.fftSize = 1024;
+  audioEngine.analyser.smoothingTimeConstant = 0.75;
+  audioEngine.freqData = new Uint8Array(audioEngine.analyser.frequencyBinCount);
+}
+
+function disconnectAudioSource(){
+  if(audioEngine.sourceNode){
+    try{ audioEngine.sourceNode.disconnect(); }catch(e){}
+    audioEngine.sourceNode = null;
+  }
+  if(audioEngine.micStream){
+    audioEngine.micStream.getTracks().forEach(tr => tr.stop());
+    audioEngine.micStream = null;
+  }
+  if(audioEngine.audioEl){
+    audioEngine.audioEl.pause();
+  }
+  audioEngine.active = false;
+  if(audioEngine.sourceKind !== 'stems') audioEngine.sourceKind = null;
+}
+
+function disconnectStems(){
+  STEM_KEYS.forEach(key=>{
+    const s = audioEngine.stems[key];
+    if(!s) return;
+    try{ s.sourceNode && s.sourceNode.disconnect(); }catch(e){}
+    s.audioEl.pause();
+  });
+  audioEngine.stemsActive = false;
+  if(audioEngine.sourceKind === 'stems') audioEngine.sourceKind = null;
+}
+
+async function loadAudioFile(file){
+  initAudioContext();
+  if(audioEngine.ctx.state === 'suspended') await audioEngine.ctx.resume();
+  disconnectStems();
+  disconnectAudioSource();
+
+  if(!audioEngine.audioEl){
+    audioEngine.audioEl = new Audio();
+    audioEngine.audioEl.loop = true;
+    audioEngine.audioEl.crossOrigin = 'anonymous';
+  }
+  const url = URL.createObjectURL(file);
+  audioEngine.audioEl.src = url;
+
+  // A given <audio> element can only have one MediaElementSourceNode ever created for it.
+  if(!audioEngine._fileSourceNode){
+    audioEngine._fileSourceNode = audioEngine.ctx.createMediaElementSource(audioEngine.audioEl);
+  }
+  audioEngine._fileSourceNode.connect(audioEngine.analyser);
+  audioEngine.analyser.connect(audioEngine.ctx.destination);
+  audioEngine.sourceNode = audioEngine._fileSourceNode;
+  audioEngine.sourceKind = 'file';
+  await audioEngine.audioEl.play();
+  audioEngine.active = true;
+}
+
+async function startMic(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    initAudioContext();
+    if(audioEngine.ctx.state === 'suspended') await audioEngine.ctx.resume();
+    disconnectStems();
+    disconnectAudioSource();
+    audioEngine.micStream = stream;
+    const micNode = audioEngine.ctx.createMediaStreamSource(stream);
+    micNode.connect(audioEngine.analyser);
+    // deliberately not connected to destination — avoids feedback/echo
+    audioEngine.sourceNode = micNode;
+    audioEngine.sourceKind = 'mic';
+    audioEngine.active = true;
+  } catch(e){
+    toast('Microphone access denied or unavailable');
+  }
+}
+
+/* --- Stem files (already separated by an external tool — see STEM_KEYS note above) --- */
+async function loadStemFile(stemKey, file){
+  initAudioContext();
+  if(audioEngine.ctx.state === 'suspended') await audioEngine.ctx.resume();
+  if(!audioEngine.stemsActive) disconnectAudioSource(); // leaving single/mic mode
+  audioEngine.stemsActive = true;
+  audioEngine.sourceKind = 'stems';
+
+  let s = audioEngine.stems[stemKey];
+  if(!s){
+    s = audioEngine.stems[stemKey] = {
+      audioEl: new Audio(),
+      sourceNode: null,
+      analyser: audioEngine.ctx.createAnalyser(),
+      freqData: null,
+      colEnergy: new Float32Array(GRID_COLS),
+      energy: 0,
+    };
+    s.audioEl.loop = true;
+    s.audioEl.crossOrigin = 'anonymous';
+    s.analyser.fftSize = 1024;
+    s.analyser.smoothingTimeConstant = 0.75;
+    s.freqData = new Uint8Array(s.analyser.frequencyBinCount);
+  }
+  const url = URL.createObjectURL(file);
+  s.audioEl.src = url;
+
+  if(!s.sourceNode){
+    s.sourceNode = audioEngine.ctx.createMediaElementSource(s.audioEl);
+  }
+  try{ s.sourceNode.disconnect(); }catch(e){}
+  s.sourceNode.connect(s.analyser);
+  try{ s.analyser.disconnect(); }catch(e){}
+  s.analyser.connect(audioEngine.ctx.destination);
+
+  // roughly align to whatever else is already playing
+  const playing = STEM_KEYS.map(k => audioEngine.stems[k]).find(o => o && !o.audioEl.paused);
+  if(playing) s.audioEl.currentTime = playing.audioEl.currentTime;
+
+  await s.audioEl.play();
+}
+
+function stemsLoadedCount(){
+  return STEM_KEYS.reduce((n, k) => n + (audioEngine.stems[k] ? 1 : 0), 0);
+}
+
+function toggleStemsPlayback(){
+  const loaded = STEM_KEYS.map(k => audioEngine.stems[k]).filter(Boolean);
+  if(!loaded.length) return;
+  const shouldPlay = loaded[0].audioEl.paused;
+  loaded.forEach(s => shouldPlay ? s.audioEl.play() : s.audioEl.pause());
+  return shouldPlay;
+}
+
+function seekStems(deltaSeconds){
+  const loaded = STEM_KEYS.map(k => audioEngine.stems[k]).filter(Boolean);
+  loaded.forEach(s => {
+    const dur = s.audioEl.duration || Infinity;
+    s.audioEl.currentTime = Math.max(0, Math.min(dur, s.audioEl.currentTime + deltaSeconds));
+  });
+}
+
+function stopStems(){
+  const loaded = STEM_KEYS.map(k => audioEngine.stems[k]).filter(Boolean);
+  loaded.forEach(s => { s.audioEl.pause(); s.audioEl.currentTime = 0; });
+}
+
+/* --- Shared column-energy mapping: log-scaled bin -> grid column, like a real EQ --- */
+function accumulateColEnergy(freqData, colEnergyOut, dt){
+  const n = freqData.length;
+  const minIdx = 1, maxIdx = Math.floor(n * 0.5);
+  for(let c = 0; c < GRID_COLS; c++){
+    const tt = c / (GRID_COLS - 1);
+    const idx = Math.min(maxIdx, Math.floor(minIdx * Math.pow(maxIdx / minIdx, tt)));
+    const w = 2;
+    let sum = 0, cnt = 0;
+    for(let k = Math.max(0, idx - w); k <= Math.min(n - 1, idx + w); k++){ sum += freqData[k]; cnt++; }
+    const raw = (sum / cnt) / 255;
+    colEnergyOut[c] += (raw - colEnergyOut[c]) * Math.min(1, dt * 10);
+  }
+}
+
+function updateStemsFrame(dt){
+  STEM_KEYS.forEach(key => {
+    const s = audioEngine.stems[key];
+    if(!s) return;
+    s.analyser.getByteFrequencyData(s.freqData);
+    let sum = 0;
+    for(let i = 0; i < s.freqData.length; i++) sum += s.freqData[i];
+    s.energy = (sum / s.freqData.length) / 255;
+    accumulateColEnergy(s.freqData, s.colEnergy, dt);
+  });
+
+  // Beat detection off the drums stem when present (best transient signal), else bass.
+  const beatSource = audioEngine.stems.drums || audioEngine.stems.bass;
+  if(beatSource){
+    audioEngine.bassEMA += (beatSource.energy - audioEngine.bassEMA) * 0.06;
+    audioEngine.beatCooldown -= dt;
+    if(beatSource.energy > audioEngine.bassEMA * 1.35 + 0.06 && audioEngine.beatCooldown <= 0){
+      audioEngine.beatPulse = 1.0;
+      audioEngine.beatCooldown = 0.16;
+    }
+  }
+  audioEngine.beatPulse *= Math.exp(-dt * 7);
+}
+
+function updateAudioFrame(dt){
+  if(audioEngine.stemsActive){ updateStemsFrame(dt); return; }
+  if(!audioEngine.active || !audioEngine.analyser) return;
+  const analyser = audioEngine.analyser, data = audioEngine.freqData;
+  analyser.getByteFrequencyData(data);
+
+  // Bass energy drives beat detection (kick/bass tends to carry the beat).
+  let bassSum = 0;
+  const bassBins = 10;
+  for(let k = 2; k < 2 + bassBins; k++) bassSum += data[k];
+  const bassEnergy = (bassSum / bassBins) / 255;
+  audioEngine.bassEMA += (bassEnergy - audioEngine.bassEMA) * 0.06;
+  audioEngine.beatCooldown -= dt;
+  if(bassEnergy > audioEngine.bassEMA * 1.35 + 0.06 && audioEngine.beatCooldown <= 0){
+    audioEngine.beatPulse = 1.0;
+    audioEngine.beatCooldown = 0.16;
+  }
+  audioEngine.beatPulse *= Math.exp(-dt * 7);
+
+  accumulateColEnergy(data, audioEngine.colEnergy, dt);
+}
+
+function initEngineIfNeeded(){
+  if(three) { attachRenderer(); return; }
+  loadThree();
+}
+
+async function loadThree(){
+  const THREE = await import('three');
+  const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+
+  const stage = document.getElementById('stage');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x060708);
+  scene.fog = new THREE.Fog(0x060708, 30, 70);
+
+  const camera = new THREE.PerspectiveCamera(45, stage.clientWidth / stage.clientHeight, 0.1, 200);
+  camera.position.set(18, 16, 22);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
+  stage.insertBefore(renderer.domElement, stage.firstChild);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 8;
+  controls.maxDistance = 55;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.6;
+
+  scene.add(new THREE.AmbientLight(0x8899aa, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(12, 20, 10);
+  scene.add(key);
+  const rim = new THREE.PointLight(0x7dd3fc, 0.8, 60);
+  rim.position.set(-14, 8, -12);
+  scene.add(rim);
+  const fill = new THREE.PointLight(0xffe8c9, 0.4, 60);
+  fill.position.set(0, -6, 14);
+  scene.add(fill);
+
+  const geo = new THREE.SphereGeometry(0.22, 10, 8);
+  const makeMat = (hex) => new THREE.MeshStandardMaterial({ color: hex, metalness: 0.85, roughness: 0.28 });
+  // Per-instance vertexColors on InstancedMesh renders near-black in this three.js build
+  // (isolated and confirmed: happens even with plain white colors, even on MeshBasicMaterial —
+  // not a lighting/color-space issue, the instanced-color path itself is broken here). Instead,
+  // each color category gets its own mesh with a normal solid material.color, and every sphere
+  // gets written into whichever mesh matches its current category each frame (see tick()).
+  const categoryMeshes = { gray: new THREE.InstancedMesh(geo, makeMat(BASE_SPHERE_COLOR), SPHERE_COUNT) };
+  STEM_KEYS.forEach(k => { categoryMeshes[k] = new THREE.InstancedMesh(geo, makeMat(STEM_COLORS[k]), SPHERE_COUNT); });
+  Object.values(categoryMeshes).forEach(m => {
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    m.count = 0;
+    scene.add(m);
+  });
+
+  const dummy = new THREE.Object3D();
+
+  // subtle ground plane for depth reference
+  const groundGeo = new THREE.PlaneGeometry(60, 60);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x0a0b0d, metalness: 0.1, roughness: 0.95 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -6;
+  scene.add(ground);
+
+  three = { THREE, scene, camera, renderer, controls, categoryMeshes, dummy, stage };
+
+  buildGrid();
+  window.addEventListener('resize', onResize);
+  const ro = new ResizeObserver(onResize);
+  ro.observe(stage);
+
+  attachControlsSync();
+  engine.ready = true;
+  resolveTo({ type: 'chaos' });
+  requestAnimationFrame(tick);
+}
+
+function attachRenderer(){
+  const stage = document.getElementById('stage');
+  if(three.renderer.domElement.parentElement !== stage){
+    stage.insertBefore(three.renderer.domElement, stage.firstChild);
+  }
+  onResize();
+}
+
+function attachControlsSync(){
+  const btn = document.getElementById('autoRotateBtn');
+  if(btn) btn.textContent = 'Auto-rotate: ' + (engine.autoRotate ? 'on' : 'off');
+}
+
+function onResize(){
+  if(!three) return;
+  const { stage, camera, renderer } = three;
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if(w === 0 || h === 0) return;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+
+/* --- Grid positions and per-sphere state --- */
+const state = {
+  baseX: new Float32Array(SPHERE_COUNT),
+  baseZ: new Float32Array(SPHERE_COUNT),
+  currentY: new Float32Array(SPHERE_COUNT),
+  targetY: new Float32Array(SPHERE_COUNT),
+  chaosPhase: new Float32Array(SPHERE_COUNT),
+  chaosSeedX: new Float32Array(SPHERE_COUNT),
+  chaosSeedZ: new Float32Array(SPHERE_COUNT),
+  delay: new Float32Array(SPHERE_COUNT),
+  chaosMode: new Uint8Array(SPHERE_COUNT), // 1 = follow live chaos field, 0 = follow fixed targetY
+};
+
+function buildGrid(){
+  const rand = mulberry32(42);
+  const spacing = 0.62;
+  const offX = (GRID_COLS - 1) * spacing / 2;
+  const offZ = (GRID_ROWS - 1) * spacing / 2;
+  let n = 0;
+  for(let j = 0; j < GRID_ROWS; j++){
+    for(let i = 0; i < GRID_COLS; i++){
+      state.baseX[n] = i * spacing - offX;
+      state.baseZ[n] = j * spacing - offZ;
+      state.currentY[n] = 0;
+      state.targetY[n] = 0;
+      state.chaosPhase[n] = rand() * Math.PI * 2;
+      state.chaosSeedX[n] = rand() * 1000;
+      state.chaosSeedZ[n] = rand() * 1000;
+      state.delay[n] = rand();
+      state.chaosMode[n] = 1;
+      n++;
+    }
+  }
+}
+
+/* Cheap value-noise (sum of sines) — good enough for organic drift, no deps. */
+function noise2D(x, y, t){
+  return (
+    Math.sin(x * 1.3 + t * 0.9) * Math.cos(y * 1.1 - t * 0.7) +
+    Math.sin(x * 0.6 - y * 0.8 + t * 1.3) * 0.6 +
+    Math.sin((x + y) * 0.35 + t * 0.5) * 0.4
+  ) / 2.0;
+}
+
+/* --- Shape rasterization: draw a target onto an offscreen canvas, sample per grid cell --- */
+const rasterCanvas = document.createElement('canvas');
+rasterCanvas.width = GRID_COLS * 8;
+rasterCanvas.height = GRID_ROWS * 8;
+const rasterCtx = rasterCanvas.getContext('2d', { willReadFrequently: true });
+
+function rasterizeText(text){
+  const ctx = rasterCtx, W = rasterCanvas.width, H = rasterCanvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let size = H * 0.85;
+  ctx.font = `800 ${size}px 'Space Grotesk', Inter, sans-serif`;
+  while(ctx.measureText(text).width > W * 0.92 && size > 6){
+    size -= 2;
+    ctx.font = `800 ${size}px 'Space Grotesk', Inter, sans-serif`;
+  }
+  ctx.fillText(text, W / 2, H / 2 + size * 0.03);
+}
+
+function rasterizePreset(preset){
+  const ctx = rasterCtx, W = rasterCanvas.width, H = rasterCanvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff';
+
+  if(preset === 'circle'){
+    ctx.beginPath();
+    ctx.arc(W / 2, H / 2, Math.min(W, H) * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+  } else if(preset === 'car'){
+    const midY = H * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(W * 0.06, midY);
+    ctx.lineTo(W * 0.10, H * 0.44);
+    ctx.lineTo(W * 0.28, H * 0.30);
+    ctx.lineTo(W * 0.60, H * 0.30);
+    ctx.lineTo(W * 0.74, H * 0.44);
+    ctx.lineTo(W * 0.94, midY);
+    ctx.lineTo(W * 0.94, H * 0.72);
+    ctx.lineTo(W * 0.06, H * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath(); ctx.arc(W * 0.24, H * 0.74, H * 0.11, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W * 0.76, H * 0.74, H * 0.11, 0, Math.PI * 2); ctx.fill();
+  } else if(preset === 'skyline'){
+    const rand = mulberry32(7);
+    let x = 0;
+    while(x < W){
+      const bw = W * (0.05 + rand() * 0.07);
+      const bh = H * (0.25 + rand() * 0.6);
+      ctx.fillRect(x, H - bh, bw, bh);
+      x += bw + W * 0.01;
+    }
+  } else if(preset === 'blob'){
+    const rand = mulberry32(19);
+    const cx = W / 2, cy = H / 2, base = Math.min(W, H) * 0.36;
+    const pts = 24;
+    ctx.beginPath();
+    for(let k = 0; k <= pts; k++){
+      const a = (k / pts) * Math.PI * 2;
+      const r = base * (0.72 + rand() * 0.56);
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.75;
+      if(k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+function sampleRasterToTargets(peakHeight){
+  const W = rasterCanvas.width, H = rasterCanvas.height;
+  const img = rasterCtx.getImageData(0, 0, W, H).data;
+  const cellW = W / GRID_COLS, cellH = H / GRID_ROWS;
+  let n = 0;
+  for(let j = 0; j < GRID_ROWS; j++){
+    for(let i = 0; i < GRID_COLS; i++){
+      const px = Math.min(W - 1, Math.floor((i + 0.5) * cellW));
+      const py = Math.min(H - 1, Math.floor((j + 0.5) * cellH));
+      const idx = (py * W + px) * 4;
+      const lit = img[idx] > 120;
+      state.targetY[n] = lit ? peakHeight : 0;
+      state.chaosMode[n] = 0;
+      n++;
+    }
+  }
+}
+
+/* --- Public transition entry point --- */
+function resolveTo(spec){
+  if(!engine.ready) return;
+  if(spec.type === 'chaos'){
+    for(let n = 0; n < SPHERE_COUNT; n++) state.chaosMode[n] = 1;
+    return;
+  }
+  if(spec.type === 'text') rasterizeText(spec.text);
+  else if(spec.type === 'preset') rasterizePreset(spec.preset);
+  sampleRasterToTargets(PEAK_HEIGHT);
+}
+
+/* --- Ambient auto-loop --- */
+function updateAmbient(dt){
+  engine.ambientTimer += dt;
+  const t = engine.ambientTimer;
+  switch(engine.ambientPhase){
+    case 'chaos':
+      if(t > 4){ engine.ambientPhase = 'resolving'; engine.ambientTimer = 0;
+        const p = AMBIENT_PRESETS[engine.ambientPresetIdx % AMBIENT_PRESETS.length];
+        engine.ambientPresetIdx++;
+        if(p === 'text') resolveTo({ type: 'text', text: 'FORMFIND' });
+        else resolveTo({ type: 'preset', preset: p });
+      }
+      break;
+    case 'resolving':
+      if(t > 3.5) { engine.ambientPhase = 'hold'; engine.ambientTimer = 0; }
+      break;
+    case 'hold':
+      if(t > 3.5) { engine.ambientPhase = 'unresolving'; engine.ambientTimer = 0; resolveTo({ type: 'chaos' }); }
+      break;
+    case 'unresolving':
+      if(t > 3.5) { engine.ambientPhase = 'chaos'; engine.ambientTimer = 0; }
+      break;
+  }
+}
+
+/* --- Animation loop --- */
+let lastT = performance.now();
+function tick(now){
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  if(!three) return;
+
+  updateHwSimulator(now, dt);
+  if(engine.mode === 'ambient') updateAmbient(dt * engine.speed);
+  if(engine.mode === 'audio') updateAudioFrame(dt);
+
+  const { THREE, categoryMeshes, dummy, camera, renderer, scene, controls } = three;
+  const t = now * 0.001 * engine.speed;
+  const lerpRate = 1 - Math.pow(0.0025, dt * 3);
+  const audioStemsLive = engine.mode === 'audio' && audioEngine.stemsActive;
+  const audioSingleLive = engine.mode === 'audio' && audioEngine.active && !audioStemsLive;
+  const audioLive = audioStemsLive || audioSingleLive;
+
+  if(audioStemsLive){
+    for(let c = 0; c < GRID_COLS; c++){
+      let total = 0, domVal = -1, domIdx = 0;
+      for(let ki = 0; ki < STEM_KEYS.length; ki++){
+        const s = audioEngine.stems[STEM_KEYS[ki]];
+        const v = s ? s.colEnergy[c] : 0;
+        total += v;
+        if(v > domVal){ domVal = v; domIdx = ki; }
+      }
+      colTotalBuf[c] = total;
+      colDominantBuf[c] = domIdx;
+    }
+  }
+
+  const counters = { gray: 0 };
+  STEM_KEYS.forEach(k => { counters[k] = 0; });
+
+  for(let n = 0; n < SPHERE_COUNT; n++){
+    let ty;
+    const col = n % GRID_COLS;
+    if(audioStemsLive){
+      const bandHeight = colTotalBuf[col] * PEAK_HEIGHT * engine.turbulence;
+      const shimmer = audioEngine.beatPulse * PEAK_HEIGHT * 0.5 * engine.turbulence * (0.5 + 0.5 * noise2D(state.baseX[n], state.baseZ[n], t * 2));
+      const idle = noise2D(state.baseX[n] * 0.4, state.baseZ[n] * 0.4, t * 0.5) * 0.15;
+      ty = bandHeight * (0.85 + 0.15 * noise2D(state.baseX[n], state.baseZ[n] + col, t * 0.8)) + shimmer + idle;
+    } else if(audioSingleLive){
+      const bandHeight = audioEngine.colEnergy[col] * PEAK_HEIGHT * engine.turbulence;
+      const shimmer = audioEngine.beatPulse * PEAK_HEIGHT * 0.5 * engine.turbulence * (0.5 + 0.5 * noise2D(state.baseX[n], state.baseZ[n], t * 2));
+      const idle = noise2D(state.baseX[n] * 0.4, state.baseZ[n] * 0.4, t * 0.5) * 0.15;
+      ty = bandHeight * (0.85 + 0.15 * noise2D(state.baseX[n], state.baseZ[n] + col, t * 0.8)) + shimmer + idle;
+    } else if(state.chaosMode[n]){
+      const fx = state.baseX[n] * 0.35 + state.chaosSeedX[n];
+      const fz = state.baseZ[n] * 0.35 + state.chaosSeedZ[n];
+      ty = noise2D(fx, fz, t * 0.6) * 1.6 * engine.turbulence;
+    } else {
+      ty = state.targetY[n];
+    }
+    const rate = lerpRate * (0.6 + state.delay[n] * 0.8);
+    state.currentY[n] += (ty - state.currentY[n]) * Math.min(1, rate);
+
+    dummy.position.set(state.baseX[n], state.currentY[n], state.baseZ[n]);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+
+    // Color category: which bucket-mesh this sphere's transform goes into this frame.
+    // Quiet columns (or non-audio modes) stay neutral gray; loud columns take on
+    // whichever stem dominates that column's energy right now.
+    let category = 'gray';
+    if(audioStemsLive && colTotalBuf[col] > 0.05) category = STEM_KEYS[colDominantBuf[col]];
+
+    const targetMesh = categoryMeshes[category];
+    targetMesh.setMatrixAt(counters[category], dummy.matrix);
+    counters[category]++;
+  }
+
+  Object.keys(categoryMeshes).forEach(key => {
+    const m = categoryMeshes[key];
+    m.count = counters[key];
+    m.instanceMatrix.needsUpdate = true;
+  });
+
+  controls.autoRotate = engine.autoRotate;
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ================= View router (single view — kept for template consistency) ================= */
+const main = document.getElementById('main');
+let view = 'home';
+function setView(v){ view = v; render(); window.scrollTo(0,0); }
+function render(){ if(view === 'home') return renderHome(); }
+
+function renderHome(){
+  main.innerHTML = `
+    <div id="stage">
+      <div id="stageHint">drag to orbit &middot; scroll to zoom</div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="label">Mode</div>
+        <div class="group">
+          <button class="btn" id="modeAmbient">Ambient loop</button>
+          <button class="btn secondary" id="modeManual">Manual</button>
+          <button class="btn secondary" id="modeAudio">Audio</button>
+        </div>
+      </div>
+
+      <div class="row" id="manualControls" style="display:none;">
+        <div class="label">Resolve into</div>
+        <div class="row" style="margin-top:0;">
+          <input id="textInput" type="text" maxlength="12" placeholder="Type a word (max 12 chars)" value="FORMFIND">
+          <button class="btn accent" id="resolveTextBtn">Resolve</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <div class="group">
+            <button class="btn secondary preset-btn" data-preset="circle">Circle</button>
+            <button class="btn secondary preset-btn" data-preset="car">Car profile</button>
+            <button class="btn secondary preset-btn" data-preset="skyline">Skyline</button>
+            <button class="btn secondary preset-btn" data-preset="blob">Blob</button>
+          </div>
+          <button class="btn secondary" id="scrambleBtn" style="margin-left:auto;">Scramble</button>
+        </div>
+      </div>
+
+      <div class="row" id="audioControls" style="display:none;">
+        <div class="label">Audio source</div>
+        <div class="row" style="margin-top:0;">
+          <label class="btn secondary" for="audioFileInput" style="display:inline-flex; align-items:center;">
+            Choose audio file
+            <input id="audioFileInput" type="file" accept="audio/*" style="display:none;">
+          </label>
+          <button class="btn secondary" id="micBtn">Use microphone</button>
+          <button class="btn ghost" id="micStopBtn" style="display:none;">Stop microphone</button>
+        </div>
+        <div class="row" id="audioTransport" style="margin-top:8px; display:none;">
+          <button class="btn secondary" id="audioRewindBtn" title="Back 10s">⏪ 10s</button>
+          <button class="btn accent" id="audioPlayPauseBtn">Pause</button>
+          <button class="btn secondary" id="audioStopBtn">Stop</button>
+          <button class="btn secondary" id="audioForwardBtn" title="Forward 10s">10s ⏩</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <span class="sliderVal" id="audioStatus" style="width:auto; text-align:left;">No audio source connected.</span>
+        </div>
+
+        <div class="row" style="margin-top:14px; border-top:1px solid var(--line); padding-top:12px;">
+          <div class="label">Or upload separated stems (run the song through Demucs / LALAL.AI / Moises first)</div>
+          <div class="group">
+            <label class="btn secondary" for="stemInput-vocals">Vocals<input class="stem-input" id="stemInput-vocals" data-stem="vocals" type="file" accept="audio/*" style="display:none;"></label>
+            <label class="btn secondary" for="stemInput-drums">Drums<input class="stem-input" id="stemInput-drums" data-stem="drums" type="file" accept="audio/*" style="display:none;"></label>
+            <label class="btn secondary" for="stemInput-bass">Bass<input class="stem-input" id="stemInput-bass" data-stem="bass" type="file" accept="audio/*" style="display:none;"></label>
+            <label class="btn secondary" for="stemInput-other">Other / guitar<input class="stem-input" id="stemInput-other" data-stem="other" type="file" accept="audio/*" style="display:none;"></label>
+          </div>
+        </div>
+        <div class="row" id="stemsTransport" style="margin-top:8px; display:none;">
+          <button class="btn secondary" id="stemsRewindBtn" title="Back 10s">⏪ 10s</button>
+          <button class="btn accent" id="stemsPlayPauseBtn">Pause stems</button>
+          <button class="btn secondary" id="stemsStopBtn">Stop stems</button>
+          <button class="btn secondary" id="stemsForwardBtn" title="Forward 10s">10s ⏩</button>
+        </div>
+        <div class="row" id="stemLegend" style="margin-top:8px; display:none;">
+          <span class="sliderVal" style="width:auto;"><span id="legend-vocals" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#E97452;margin-right:5px;"></span>Vocals</span>
+          <span class="sliderVal" style="width:auto;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#7DD3FC;margin-right:5px;"></span>Drums</span>
+          <span class="sliderVal" style="width:auto;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#B98AFF;margin-right:5px;"></span>Bass</span>
+          <span class="sliderVal" style="width:auto;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#8CE99A;margin-right:5px;"></span>Other / guitar</span>
+        </div>
+
+        <div class="row" style="margin-top:4px;">
+          <span class="sliderVal" id="stemsStatus" style="width:auto; text-align:left;"></span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="sliderRow">
+          <span class="label" style="width:auto; margin:0;">Speed</span>
+          <input type="range" id="speedSlider" min="0.2" max="2.5" step="0.1" value="1">
+          <span class="sliderVal" id="speedVal">1.0</span>
+        </div>
+        <div class="sliderRow">
+          <span class="label" style="width:auto; margin:0;">Turbulence</span>
+          <input type="range" id="turbSlider" min="0" max="2" step="0.1" value="1">
+          <span class="sliderVal" id="turbVal">1.0</span>
+        </div>
+        <button class="btn ghost" id="autoRotateBtn">Auto-rotate: on</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="label">Physical rig (optional) — mirrors whatever's on screen live to a servo rig over WebSerial. Chrome/Edge only.</div>
+        <div class="group">
+          <button class="btn secondary" id="hwConnectBtn">Connect Arduino</button>
+          <button class="btn ghost" id="hwDisconnectBtn" style="display:none;">Disconnect</button>
+        </div>
+        <div class="sliderRow" style="min-width:0;">
+          <span class="label" style="width:auto; margin:0;">Servo count</span>
+          <input type="number" id="hwServoCount" min="1" max="16" value="8" style="width:56px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:6px; padding:6px 8px;">
+          <span class="sliderVal" style="width:auto;">(must match NUM_SERVOS in the .ino)</span>
+        </div>
+      </div>
+      <div class="row">
+        <span class="sliderVal" id="hwStatus" style="width:auto; text-align:left;">Not connected.</span>
+      </div>
+      <div class="row" style="align-items:center; border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
+        <div class="label">Sensor input — a potentiometer or photoresistor on the Arduino can drive a control here live, closing the loop back into FORMFIND.</div>
+        <div class="group">
+          <span class="label" style="width:auto; margin:0;">Sensor drives</span>
+          <select id="hwSensorTarget" style="background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:6px; padding:8px 10px; font-size:13px;">
+            <option value="off">Off</option>
+            <option value="turbulence">Turbulence</option>
+            <option value="speed">Speed</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <span class="sliderVal" id="hwSensorStatus" style="width:auto; text-align:left;">No sensor readings yet.</span>
+      </div>
+      <div class="row" style="align-items:center;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); cursor:pointer;">
+          <input type="checkbox" id="hwSimulateToggle">
+          Show simulated rig (3D preview, no hardware needed — includes realistic servo speed)
+        </label>
+      </div>
+      <div class="row" id="hwSimWrap" style="display:none; margin-top:4px; flex-direction:column;">
+        <div id="hwSimViewport" style="width:100%; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);"></div>
+        <button class="btn ghost" id="hwSimViewBtn" style="align-self:flex-start; margin-top:6px;">Angled view</button>
+      </div>
+
+      <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
+        <div class="label">Or embed a Wokwi circuit — richer visual reference (real board/servo parts, as wired in your Wokwi project). This is a static reference view, not live-linked to what's happening above — Wokwi doesn't have a supported way to receive real-time data from another page.</div>
+        <div class="row" style="margin-top:0;">
+          <input id="wokwiUrlInput" type="text" placeholder="Paste a wokwi.com/projects/... link" style="flex:1; min-width:160px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
+          <button class="btn accent" id="wokwiLoadBtn">Load</button>
+        </div>
+        <div id="wokwiEmbedWrap" style="display:none; margin-top:10px; width:100%; height:480px; border:1px solid var(--line); border-radius:8px; overflow:hidden;"></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('modeAmbient').onclick = ()=>setMode('ambient');
+  document.getElementById('hwConnectBtn').onclick = async ()=>{
+    if(!('serial' in navigator)){
+      document.getElementById('hwStatus').textContent = 'WebSerial needs Chrome or Edge on desktop.';
+      toast('WebSerial needs Chrome or Edge on desktop');
+      return;
+    }
+    const count = parseInt(document.getElementById('hwServoCount').value, 10) || 8;
+    hardwareEngine.servoCount = Math.max(1, Math.min(16, count));
+    document.getElementById('hwStatus').textContent = 'Connecting…';
+    const bridge = await ensureHwBridge();
+    await bridge.connect(); // onStatusChange updates hwStatus text and hardwareEngine.connected
+  };
+  document.getElementById('hwDisconnectBtn').onclick = async ()=>{
+    if(hwBridge) await hwBridge.disconnect();
+  };
+  document.getElementById('hwServoCount').onchange = (e)=>{
+    const v = Math.max(1, Math.min(16, parseInt(e.target.value, 10) || 8));
+    e.target.value = v;
+    hardwareEngine.servoCount = v; // takes effect on the next frame even if already connected — ensureHwSimScene() rebuilds the rig automatically on count mismatch
+  };
+  document.getElementById('hwSensorTarget').onchange = (e)=>{
+    hardwareEngine.sensorTarget = e.target.value;
+    if(e.target.value === 'off'){
+      document.getElementById('hwSensorStatus').textContent = 'No sensor readings yet.';
+    }
+  };
+  document.getElementById('hwSimulateToggle').onchange = (e)=>{
+    hardwareEngine.simulate = e.target.checked;
+    document.getElementById('hwSimWrap').style.display = e.target.checked ? 'flex' : 'none';
+    if(e.target.checked) ensureHwSimScene();
+  };
+  document.getElementById('hwSimViewBtn').onclick = ()=>{
+    setHwSimView(hwSim && hwSim.viewMode === 'angle' ? 'side' : 'angle');
+  };
+  document.getElementById('wokwiLoadBtn').onclick = loadWokwiEmbed;
+  document.getElementById('wokwiUrlInput').addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter') loadWokwiEmbed();
+  });
+  if(!('serial' in navigator)){
+    document.getElementById('hwConnectBtn').disabled = true;
+    document.getElementById('hwStatus').textContent = 'WebSerial needs Chrome or Edge on desktop.';
+  }
+  updateHardwareUi();
+  document.getElementById('modeManual').onclick = ()=>setMode('manual');
+  document.getElementById('modeAudio').onclick = ()=>setMode('audio');
+  document.getElementById('audioFileInput').onchange = async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    try{
+      await loadAudioFile(file);
+      document.getElementById('audioStatus').textContent = `Playing: ${escapeHtml(file.name)}`;
+      document.getElementById('audioTransport').style.display = 'flex';
+      document.getElementById('audioPlayPauseBtn').textContent = 'Pause';
+      document.getElementById('micStopBtn').style.display = 'none';
+      resetStemsUi();
+    } catch(err){
+      toast('Could not play that file');
+    }
+  };
+  document.getElementById('micBtn').onclick = async ()=>{
+    await startMic();
+    if(audioEngine.active && audioEngine.sourceKind === 'mic'){
+      document.getElementById('audioStatus').textContent = 'Listening to microphone…';
+      document.getElementById('audioTransport').style.display = 'none'; // no seek/stop concept for a live mic stream
+      document.getElementById('micStopBtn').style.display = 'inline-flex';
+      resetStemsUi();
+    }
+  };
+  document.getElementById('micStopBtn').onclick = ()=>{
+    disconnectAudioSource();
+    document.getElementById('audioStatus').textContent = 'No audio source connected.';
+    document.getElementById('micStopBtn').style.display = 'none';
+  };
+  document.getElementById('audioRewindBtn').onclick = ()=>{
+    if(audioEngine.audioEl) audioEngine.audioEl.currentTime = Math.max(0, audioEngine.audioEl.currentTime - 10);
+  };
+  document.getElementById('audioForwardBtn').onclick = ()=>{
+    if(!audioEngine.audioEl) return;
+    const dur = audioEngine.audioEl.duration || Infinity;
+    audioEngine.audioEl.currentTime = Math.min(dur, audioEngine.audioEl.currentTime + 10);
+  };
+  document.getElementById('audioStopBtn').onclick = ()=>{
+    if(!audioEngine.audioEl) return;
+    audioEngine.audioEl.pause();
+    audioEngine.audioEl.currentTime = 0;
+    document.getElementById('audioPlayPauseBtn').textContent = 'Play';
+  };
+  document.getElementById('audioPlayPauseBtn').onclick = (e)=>{
+    if(!audioEngine.audioEl) return;
+    if(audioEngine.audioEl.paused){ audioEngine.audioEl.play(); e.target.textContent = 'Pause'; }
+    else { audioEngine.audioEl.pause(); e.target.textContent = 'Play'; }
+  };
+  document.querySelectorAll('.stem-input').forEach(inp=>{
+    inp.onchange = async (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      const key = inp.dataset.stem;
+      try{
+        await loadStemFile(key, file);
+        if(!audioEngine.stemsActive) return; // user switched to a single file/mic while this was loading
+        document.getElementById('audioStatus').textContent = 'No audio source connected.';
+        document.getElementById('audioTransport').style.display = 'none';
+        document.getElementById('micStopBtn').style.display = 'none';
+        document.getElementById('stemLegend').style.display = 'flex';
+        document.getElementById('stemsTransport').style.display = 'flex';
+        document.getElementById('stemsPlayPauseBtn').textContent = 'Pause stems';
+        updateStemsStatusText();
+      } catch(err){
+        toast(`Could not load ${STEM_LABELS[key]}`);
+      }
+    };
+  });
+  document.getElementById('stemsPlayPauseBtn').onclick = (e)=>{
+    const nowPlaying = toggleStemsPlayback();
+    if(nowPlaying !== undefined) e.target.textContent = nowPlaying ? 'Pause stems' : 'Play stems';
+  };
+  document.getElementById('stemsRewindBtn').onclick = ()=>seekStems(-10);
+  document.getElementById('stemsForwardBtn').onclick = ()=>seekStems(10);
+  document.getElementById('stemsStopBtn').onclick = ()=>{
+    stopStems();
+    document.getElementById('stemsPlayPauseBtn').textContent = 'Play stems';
+  };
+  document.getElementById('resolveTextBtn').onclick = ()=>{
+    const v = document.getElementById('textInput').value.trim();
+    if(!v){ toast('Type something first'); return; }
+    resolveTo({ type:'text', text: v.toUpperCase() });
+  };
+  document.getElementById('scrambleBtn').onclick = ()=>resolveTo({ type:'chaos' });
+  document.querySelectorAll('.preset-btn').forEach(b=>{
+    b.onclick = ()=>resolveTo({ type:'preset', preset: b.dataset.preset });
+  });
+  document.getElementById('speedSlider').oninput = (e)=>{
+    engine.speed = parseFloat(e.target.value);
+    document.getElementById('speedVal').textContent = engine.speed.toFixed(1);
+  };
+  document.getElementById('turbSlider').oninput = (e)=>{
+    engine.turbulence = parseFloat(e.target.value);
+    document.getElementById('turbVal').textContent = engine.turbulence.toFixed(1);
+  };
+  document.getElementById('autoRotateBtn').onclick = (e)=>{
+    engine.autoRotate = !engine.autoRotate;
+    e.target.textContent = 'Auto-rotate: ' + (engine.autoRotate ? 'on' : 'off');
+  };
+
+  updateModeButtons();
+  initEngineIfNeeded();
+}
+
+function setMode(m){
+  const leavingAudio = engine.mode === 'audio' && m !== 'audio';
+  engine.mode = m;
+  document.getElementById('manualControls').style.display = m === 'manual' ? 'block' : 'none';
+  document.getElementById('audioControls').style.display = m === 'audio' ? 'block' : 'none';
+  updateModeButtons();
+  if(leavingAudio){
+    disconnectAudioSource();
+    disconnectStems();
+    document.getElementById('audioTransport').style.display = 'none';
+    document.getElementById('stemsTransport').style.display = 'none';
+    document.getElementById('micStopBtn').style.display = 'none';
+    document.getElementById('audioStatus').textContent = 'No audio source connected.';
+  }
+  if(m === 'ambient'){
+    engine.ambientTimer = 0;
+    engine.ambientPhase = 'chaos';
+    resolveTo({ type:'chaos' });
+  } else {
+    resolveTo({ type:'chaos' });
+  }
+}
+function resetStemsUi(){
+  disconnectStems();
+  const legend = document.getElementById('stemLegend');
+  const ppBtn = document.getElementById('stemsPlayPauseBtn');
+  const transport = document.getElementById('stemsTransport');
+  const status = document.getElementById('stemsStatus');
+  if(legend) legend.style.display = 'none';
+  if(ppBtn) ppBtn.style.display = 'none';
+  if(transport) transport.style.display = 'none';
+  if(status) status.textContent = '';
+  document.querySelectorAll('.stem-input').forEach(inp => inp.value = '');
+}
+
+function updateStemsStatusText(){
+  const status = document.getElementById('stemsStatus');
+  if(!status) return;
+  const loaded = STEM_KEYS.filter(k => audioEngine.stems[k]).map(k => STEM_LABELS[k]);
+  const missing = STEM_KEYS.filter(k => !audioEngine.stems[k]).map(k => STEM_LABELS[k]);
+  status.textContent = `Loaded: ${loaded.join(', ')}.` + (missing.length ? ` Not provided: ${missing.join(', ')}.` : '');
+}
+
+function loadWokwiEmbed(){
+  const raw = document.getElementById('wokwiUrlInput').value.trim();
+  const m = raw.match(/(\d{6,})/); // Wokwi project IDs are long numeric strings — pull one out of whatever URL shape was pasted
+  if(!m){
+    toast('Could not find a Wokwi project ID in that link');
+    return;
+  }
+  const wrap = document.getElementById('wokwiEmbedWrap');
+  wrap.innerHTML = '';
+  const iframe = document.createElement('iframe');
+  iframe.src = `https://wokwi.com/projects/${m[1]}`; // always built from the extracted numeric ID, never the raw pasted string, so this can't become an arbitrary/malicious iframe src
+  iframe.style.cssText = 'width:100%; height:100%; border:0;';
+  iframe.title = 'Wokwi circuit reference';
+  wrap.appendChild(iframe);
+  wrap.style.display = 'block';
+}
+
+function updateHardwareUi(){
+  const connectBtn = document.getElementById('hwConnectBtn');
+  const disconnectBtn = document.getElementById('hwDisconnectBtn');
+  if(!connectBtn || !disconnectBtn) return;
+  connectBtn.style.display = hardwareEngine.connected ? 'none' : 'inline-flex';
+  disconnectBtn.style.display = hardwareEngine.connected ? 'inline-flex' : 'none';
+}
+
+function updateModeButtons(){
+  const a = document.getElementById('modeAmbient'), m = document.getElementById('modeManual'), u = document.getElementById('modeAudio');
+  if(!a || !m || !u) return;
+  a.className = 'btn ' + (engine.mode === 'ambient' ? '' : 'secondary');
+  m.className = 'btn ' + (engine.mode === 'manual' ? '' : 'secondary');
+  u.className = 'btn ' + (engine.mode === 'audio' ? '' : 'secondary');
+}
+
+/* ================= Boot ================= */
+function applyThemeChrome(){
+  document.getElementById('themeColorMeta').setAttribute('content', '#0B0C0E');
+}
+(function boot(){
+  applyThemeChrome();
+  document.getElementById('footVersion').innerHTML =
+    `FORMFIND · v${APP_VERSION} · Joe.K · <a href="https://axisbim.io" target="_blank" rel="noopener">axisbim.io</a>`;
+  document.getElementById('helpBtn').onclick = showHelp;
+  render();
+})();
+
+</script>
+</body>
+</html>
