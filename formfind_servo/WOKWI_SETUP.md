@@ -32,31 +32,46 @@ real build later, add/remove `wokwi-servo` parts and connections in
 
 The embed panel in FORMFIND itself is deliberately a *static* reference —
 Wokwi doesn't have a stable, documented way to receive live data from another
-page. But there is a genuinely reliable way to wire it up for real, using a
-small bridge script:
+page. There are two ways to make it genuinely live, though:
+
+### Recommended: WebSocket bridge (no drivers, works in any browser)
+
+This is the one to use. No virtual COM ports, no driver signing, no risk of
+hitting a Secure Boot wall like the WebSerial route below can.
 
 1. Install **VS Code** + the **"Wokwi for VS Code"** extension, open this
    `arduino/formfind_servo/` folder in it, and start the simulation from the
    Wokwi sidebar (or F1 → "Wokwi: Start Simulator"). Keep the simulator panel
    visible — if it's hidden, the simulation pauses and everything goes quiet.
    `wokwi.toml` here already has `rfc2217ServerPort = 4000` set for this.
-2. Install a virtual COM port pair: **com0com** (Windows) — check "Use Ports
-   class" during setup so you get real-looking COM ports, e.g. COM10/COM11 —
-   or `socat` (Mac).
-3. `pip install pyserial`, then run:
+2. `pip install websockets pyserial`, then run:
    ```
-   python wokwi_bridge.py COM10
+   python wokwi_ws_bridge.py
    ```
-   (whichever port of the pair you're *not* giving to FORMFIND)
-4. In FORMFIND's Physical Rig panel, click **Connect Arduino** and pick the
-   *other* port (e.g. COM11).
+   It listens on `ws://localhost:8765` by default.
+3. In FORMFIND's Physical Rig panel, use **"Connect via Wokwi Bridge"** (the
+   second connection option, below "Connect Arduino") — the URL field already
+   defaults to `ws://localhost:8765`, so just click it.
 
 Now servo commands from FORMFIND — driven by whatever's actually on screen,
-audio mode included — really flow into Wokwi's running simulation, and any
-sensor reading you wire up in the simulated circuit flows back the same way,
-exactly like real hardware would behave. `wokwi_bridge.py` in this folder is
-the middleman; its own header comment has the same steps plus the Mac
-variant.
+audio mode included — flow into Wokwi's running simulation over a plain
+WebSocket, and any sensor reading you wire into the simulated circuit flows
+back the same way. Watch the servos move in the Wokwi simulator panel in VS
+Code while FORMFIND plays. `wokwi_ws_bridge.py`'s own header comment has the
+same steps.
+
+### Alternative: WebSerial + virtual COM port (more setup, can hit OS walls)
+
+`wokwi_bridge.py` (the other script in this folder) does the same thing over
+WebSerial instead, using FORMFIND's "Connect Arduino" button — which means it
+needs a virtual COM port pair (com0com on Windows, socat on Mac) sitting in
+between. This is the original approach and it does work, but com0com's
+driver isn't always signed in a way modern Windows will load without
+enabling Test Signing Mode — and on some systems, Secure Boot blocks that
+entirely, which would mean disabling Secure Boot in BIOS to proceed (not
+something to do casually — it can trigger a BitLocker recovery prompt on
+some machines). If you hit that wall, use the WebSocket bridge above
+instead — it doesn't touch any of this.
 
 There's also a plain-browser-only path (no VS Code) — Wokwi's own team
 describes a "connect to a real serial port" feature on wokwi.com itself, but
