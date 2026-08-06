@@ -1,0 +1,297 @@
+{
+  "version": 1,
+  "author": "Joe.K (FORMFIND / arduino/formfind_servo)",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-arduino-uno",
+      "id": "uno",
+      "top": 76.8,
+      "left": -9.6,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo1",
+      "top": -60,
+      "left": 260,
+      "attrs": {
+        "horn": "single"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo2",
+      "top": -60,
+      "left": 350,
+      "attrs": {
+        "horn": "single"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo3",
+      "top": -60,
+      "left": 440,
+      "attrs": {
+        "horn": "single"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo4",
+      "top": -60,
+      "left": 530,
+      "attrs": {
+        "horn": "single"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo5",
+      "top": -60,
+      "left": 620,
+      "attrs": {
+        "horn": "single"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo6",
+      "top": -60,
+      "left": 710,
+      "attrs": {
+        "horn": "single"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo7",
+      "top": -60,
+      "left": 800,
+      "attrs": {
+        "horn": "single"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo8",
+      "top": -60,
+      "left": 890,
+      "attrs": {
+        "horn": "single"
+      }
+    }
+  ],
+  "connections": [
+    [
+      "servo1:PWM",
+      "uno:2",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo1:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo1:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ],
+    [
+      "servo2:PWM",
+      "uno:3",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo2:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo2:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ],
+    [
+      "servo3:PWM",
+      "uno:4",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo3:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo3:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ],
+    [
+      "servo4:PWM",
+      "uno:5",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo4:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo4:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ],
+    [
+      "servo5:PWM",
+      "uno:6",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo5:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo5:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ],
+    [
+      "servo6:PWM",
+      "uno:7",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo6:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo6:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ],
+    [
+      "servo7:PWM",
+      "uno:8",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo7:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo7:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ],
+    [
+      "servo8:PWM",
+      "uno:9",
+      "green",
+      [
+        "v-20"
+      ]
+    ],
+    [
+      "servo8:V+",
+      "uno:5V",
+      "red",
+      [
+        "v40",
+        "h-20"
+      ]
+    ],
+    [
+      "servo8:GND",
+      "uno:GND.1",
+      "black",
+      [
+        "v50",
+        "h-30"
+      ]
+    ]
+  ],
+  "dependencies": {}
+}
