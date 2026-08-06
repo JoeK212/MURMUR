@@ -168,6 +168,11 @@ if(bridgeSrc){
   check('hardware-bridge.js: WebSocket send loop clamps angles the same way as the serial one', /a => Math\.round\(Math\.max\(0, Math\.min\(180, a\)\)\)/.test(bridgeSrc));
 }
 
+/* ===================== v1.11.1 — connect failure handling ===================== */
+sectionHeader('v1.11.1 — connect failure handling');
+check('WebSerial connect handler catches a failed module import instead of hanging on "Connecting..."', /ensureHwBridge\(\);\s*\n\s*await bridge\.connect\(\);[\s\S]{0,150}\} catch\(e\)\{/.test(src));
+check('Wokwi bridge connect handler catches a failed module import the same way', /ensureWokwiWsBridge\(url\);\s*\n\s*await bridge\.connect\(\);[\s\S]{0,150}\} catch\(e\)\{/.test(src));
+
 /* ===================== Summary ===================== */
 console.log(`\n${BOLD}${'-'.repeat(40)}${RESET}`);
 console.log(`${GREEN}${pass} passed${RESET}, ${fail ? RED : DIM}${fail} failed${RESET}`);

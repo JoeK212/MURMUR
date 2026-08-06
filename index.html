@@ -156,7 +156,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.11.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.11.1'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -1261,8 +1261,14 @@ function renderHome(){
     const count = parseInt(document.getElementById('hwServoCount').value, 10) || 8;
     hardwareEngine.servoCount = Math.max(1, Math.min(16, count));
     document.getElementById('hwStatus').textContent = 'Connecting…';
-    const bridge = await ensureHwBridge();
-    await bridge.connect(); // onStatusChange updates hwStatus text and hardwareEngine.connected
+    try{
+      const bridge = await ensureHwBridge();
+      await bridge.connect(); // onStatusChange updates hwStatus text and hardwareEngine.connected
+    } catch(e){
+      const msg = 'Could not load hardware-bridge.js — check it\'s in the same folder as this file.';
+      document.getElementById('hwStatus').textContent = msg;
+      toast(msg);
+    }
   };
   document.getElementById('hwDisconnectBtn').onclick = async ()=>{
     if(hwBridge) await hwBridge.disconnect();
@@ -1271,8 +1277,14 @@ function renderHome(){
     const url = document.getElementById('wokwiWsUrlInput').value.trim() || 'ws://localhost:8765';
     hardwareEngine.servoCount = Math.max(1, Math.min(16, parseInt(document.getElementById('hwServoCount').value, 10) || 8));
     document.getElementById('wokwiWsStatus').textContent = 'Connecting…';
-    const bridge = await ensureWokwiWsBridge(url);
-    await bridge.connect(); // onStatusChange updates wokwiWsStatus and button visibility
+    try{
+      const bridge = await ensureWokwiWsBridge(url);
+      await bridge.connect(); // onStatusChange updates wokwiWsStatus and button visibility
+    } catch(e){
+      const msg = 'Could not load hardware-bridge.js — check it\'s in the same folder as this file.';
+      document.getElementById('wokwiWsStatus').textContent = msg;
+      toast(msg);
+    }
   };
   document.getElementById('wokwiWsDisconnectBtn').onclick = ()=>{
     if(wokwiWsBridge) wokwiWsBridge.disconnect();
