@@ -156,7 +156,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.10.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.11.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -214,7 +214,7 @@ function showHelp(){
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
       <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of posts with arms swinging spheres, in elevation like the real piece, with a side/angled view toggle. It's driven by the same angle calculation the real serial connection uses, and even slew-rate-limits the motion to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Wokwi embed:</strong> paste a <a href="https://wokwi.com" target="_blank" rel="noopener">wokwi.com</a> project link to see the actual simulated board and servo parts, as wired in that project — a much richer visual reference than the 3D preview above. This is a static reference embed, not live-linked to what's on screen; Wokwi doesn't have a supported way to receive real-time data from another page.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Wokwi embed:</strong> paste a <a href="https://wokwi.com" target="_blank" rel="noopener">wokwi.com</a> project link to see the actual simulated board and servo parts, as wired in that project — a much richer visual reference than the 3D preview above. This is a static reference embed, not live-linked to what's on screen. For a genuinely live link — servos in a real Wokwi simulation moving with what's playing — use "Connect via Wokwi Bridge" instead, which talks to a small local script (<code>wokwi_ws_bridge.py</code>, see WOKWI_SETUP.md) over a plain WebSocket. No WebSerial, no virtual COM port drivers.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -346,6 +346,39 @@ async function ensureHwBridge(){
     sendIntervalMs: HW_SEND_INTERVAL_MS,
   });
   return hwBridge;
+}
+
+let wokwiWsBridge = null;
+async function ensureWokwiWsBridge(url){
+  const { createWebSocketBridge } = await import('./hardware-bridge.js');
+  // Rebuild if the URL changed since last connect — createWebSocketBridge bakes the URL in at creation.
+  if(wokwiWsBridge && wokwiWsBridge._url === url) return wokwiWsBridge;
+  wokwiWsBridge = createWebSocketBridge({
+    url,
+    getAngles: computeServoAngles,
+    onSensorReading: (norm, raw) => {
+      hardwareEngine.sensorLastRaw = raw;
+      applySensorReading(norm);
+      const status = document.getElementById('hwSensorStatus');
+      if(status) status.textContent = `Sensor: ${raw}/1023 (${norm.toFixed(2)})`;
+    },
+    onStatusChange: (status, message) => {
+      const connectBtn = document.getElementById('wokwiWsConnectBtn');
+      const disconnectBtn = document.getElementById('wokwiWsDisconnectBtn');
+      const statusEl = document.getElementById('wokwiWsStatus');
+      if(connectBtn) connectBtn.style.display = status === 'connected' ? 'none' : 'inline-flex';
+      if(disconnectBtn) disconnectBtn.style.display = status === 'connected' ? 'inline-flex' : 'none';
+      if(statusEl){
+        if(status === 'connected') statusEl.textContent = `Connected — driving ${hardwareEngine.servoCount} servo(s) via Wokwi bridge.`;
+        else if(status === 'disconnected') statusEl.textContent = 'Not connected.';
+        else if(status === 'error' && message) statusEl.textContent = message;
+      }
+      if(status === 'error' && message) toast(message);
+    },
+    sendIntervalMs: HW_SEND_INTERVAL_MS,
+  });
+  wokwiWsBridge._url = url;
+  return wokwiWsBridge;
 }
 
 function applySensorReading(norm){
@@ -1171,6 +1204,17 @@ function renderHome(){
       <div class="row">
         <span class="sliderVal" id="hwStatus" style="width:auto; text-align:left;">Not connected.</span>
       </div>
+      <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
+        <div class="label">Or connect to a Wokwi simulation via wokwi_ws_bridge.py — no WebSerial, no virtual COM port, works in any browser. See WOKWI_SETUP.md.</div>
+        <div class="row" style="margin-top:0;">
+          <input id="wokwiWsUrlInput" type="text" value="ws://localhost:8765" style="flex:1; min-width:140px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
+          <button class="btn secondary" id="wokwiWsConnectBtn">Connect via Wokwi Bridge</button>
+          <button class="btn ghost" id="wokwiWsDisconnectBtn" style="display:none;">Disconnect</button>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="sliderVal" id="wokwiWsStatus" style="width:auto; text-align:left;">Not connected.</span>
+        </div>
+      </div>
       <div class="row" style="align-items:center; border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
         <div class="label">Sensor input — a potentiometer or photoresistor on the Arduino can drive a control here live, closing the loop back into FORMFIND.</div>
         <div class="group">
@@ -1222,6 +1266,16 @@ function renderHome(){
   };
   document.getElementById('hwDisconnectBtn').onclick = async ()=>{
     if(hwBridge) await hwBridge.disconnect();
+  };
+  document.getElementById('wokwiWsConnectBtn').onclick = async ()=>{
+    const url = document.getElementById('wokwiWsUrlInput').value.trim() || 'ws://localhost:8765';
+    hardwareEngine.servoCount = Math.max(1, Math.min(16, parseInt(document.getElementById('hwServoCount').value, 10) || 8));
+    document.getElementById('wokwiWsStatus').textContent = 'Connecting…';
+    const bridge = await ensureWokwiWsBridge(url);
+    await bridge.connect(); // onStatusChange updates wokwiWsStatus and button visibility
+  };
+  document.getElementById('wokwiWsDisconnectBtn').onclick = ()=>{
+    if(wokwiWsBridge) wokwiWsBridge.disconnect();
   };
   document.getElementById('hwServoCount').onchange = (e)=>{
     const v = Math.max(1, Math.min(16, parseInt(e.target.value, 10) || 8));

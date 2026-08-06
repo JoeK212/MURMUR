@@ -155,3 +155,131 @@ export function createHardwareBridge({
     get connected(){ return state.connected; },
   };
 }
+
+/*
+  createWebSocketBridge
+  -----------------------
+  Same shape as createHardwareBridge above (connect/disconnect/connected,
+  same getAngles/onSensorReading/onStatusChange callbacks) but talks over a
+  plain WebSocket instead of WebSerial. Built for connecting to a local relay
+  script (see arduino/formfind_servo/wokwi_ws_bridge.py) that forwards to a
+  Wokwi simulation's RFC2217 serial port — no virtual COM port driver, no
+  OS-level driver signing to fight. Works for any WebSocket-speaking target
+  that understands the same line protocol, not just Wokwi specifically.
+
+  USAGE
+  -----
+    const bridge = createWebSocketBridge({
+      url: 'ws://localhost:8765',
+      getAngles: () => currentAnglesArray,
+      onSensorReading: (normalized, raw) => { ... },  // optional
+      onStatusChange: (status, message) => { ... },   // 'connected'|'disconnected'|'error'
+      sendIntervalMs: 50,                              // optional, defaults to 50
+    });
+    connectBtn.onclick = () => bridge.connect();
+    disconnectBtn.onclick = () => bridge.disconnect();
+*/
+export function createWebSocketBridge({
+  url,
+  getAngles = null,
+  onSensorReading = null,
+  onStatusChange = null,
+  sendIntervalMs = 50,
+} = {}){
+  const state = {
+    ws: null,
+    connected: false,
+    sendTimer: null,
+  };
+
+  function notify(status, message){
+    if(onStatusChange) onStatusChange(status, message);
+  }
+
+  function connect(){
+    return new Promise((resolve) => {
+      if(!url){
+        notify('error', 'No WebSocket URL configured');
+        resolve(false);
+        return;
+      }
+      let settled = false;
+      let ws;
+      try{
+        ws = new WebSocket(url);
+      } catch(e){
+        notify('error', `Could not open ${url}`);
+        resolve(false);
+        return;
+      }
+      ws.onopen = () => {
+        state.ws = ws;
+        state.connected = true;
+        settled = true;
+        notify('connected');
+        startSendLoop();
+        resolve(true);
+      };
+      ws.onmessage = (evt) => {
+        const line = String(evt.data).trim();
+        if(line.charAt(0) === 'S'){
+          const raw = parseInt(line.slice(1), 10);
+          if(!Number.isNaN(raw) && onSensorReading){
+            onSensorReading(Math.max(0, Math.min(1023, raw)) / 1023, raw);
+          }
+        }
+      };
+      ws.onerror = () => {
+        if(!settled){
+          settled = true;
+          notify('error', `Could not connect to ${url} — is the bridge script running?`);
+          resolve(false);
+        }
+      };
+      ws.onclose = () => {
+        stopSendLoop();
+        const wasConnected = state.connected;
+        state.ws = null;
+        state.connected = false;
+        if(wasConnected) notify('disconnected');
+        if(!settled){ settled = true; resolve(false); }
+      };
+    });
+  }
+
+  function disconnect(){
+    stopSendLoop();
+    if(state.ws){
+      try{ state.ws.close(); }catch(e){}
+    }
+    state.ws = null;
+    state.connected = false;
+    notify('disconnected');
+  }
+
+  function startSendLoop(){
+    stopSendLoop();
+    state.sendTimer = setInterval(() => {
+      if(!state.connected || !state.ws || state.ws.readyState !== WebSocket.OPEN || !getAngles) return;
+      const angles = getAngles();
+      if(!angles || !angles.length) return;
+      const line = 'A' + angles.map(a => Math.round(Math.max(0, Math.min(180, a)))).join(',') + '\n';
+      try{
+        state.ws.send(line);
+      } catch(e){
+        notify('error', 'Lost connection to bridge script');
+        disconnect();
+      }
+    }, sendIntervalMs);
+  }
+
+  function stopSendLoop(){
+    if(state.sendTimer){ clearInterval(state.sendTimer); state.sendTimer = null; }
+  }
+
+  return {
+    connect,
+    disconnect,
+    get connected(){ return state.connected; },
+  };
+}

@@ -159,6 +159,15 @@ sectionHeader('v1.10.0 — Wokwi circuit embed');
 check('iframe src is built from an extracted numeric ID, never the raw pasted string', /iframe\.src = `https:\/\/wokwi\.com\/projects\/\$\{m\[1\]\}`/.test(src));
 check('ID extraction uses a numeric-only regex (rules out javascript:/data: URL injection)', /raw\.match\(\/\(\\d\{6,\}\)\//.test(src));
 
+/* ===================== v1.11.0 — WebSocket Wokwi bridge ===================== */
+sectionHeader('v1.11.0 — WebSocket Wokwi bridge');
+check('WebSocket connect option exists alongside WebSerial (Connect Arduino kept, not replaced)', /id="hwConnectBtn"/.test(src) && /id="wokwiWsConnectBtn"/.test(src));
+check('WebSocket bridge dynamically imports createWebSocketBridge from the shared module', /await import\('\.\/hardware-bridge\.js'\)/.test(src) && /createWebSocketBridge/.test(src));
+if(bridgeSrc){
+  check('hardware-bridge.js: createWebSocketBridge exists with the same external shape as createHardwareBridge', /export function createWebSocketBridge/.test(bridgeSrc));
+  check('hardware-bridge.js: WebSocket send loop clamps angles the same way as the serial one', /a => Math\.round\(Math\.max\(0, Math\.min\(180, a\)\)\)/.test(bridgeSrc));
+}
+
 /* ===================== Summary ===================== */
 console.log(`\n${BOLD}${'-'.repeat(40)}${RESET}`);
 console.log(`${GREEN}${pass} passed${RESET}, ${fail ? RED : DIM}${fail} failed${RESET}`);
