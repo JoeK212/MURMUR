@@ -264,16 +264,28 @@ check('angled view position is derived from the same fit distance as side view, 
 sectionHeader('v1.20.0 — embedded firmware simulator (no terminal needed)');
 check('avr8js added to the import map (loaded from a CDN, no local install)', /"avr8js": "https:\/\/cdn\.jsdelivr\.net\/npm\/avr8js@0\.21\.0\/\+esm"/.test(src));
 check('the compiled firmware hex is embedded directly in index.html, not fetched from a separate file', /const EMBEDDED_FIRMWARE_HEX = `:10000000/.test(src));
-check('embedded firmware setup mirrors avr8js_sim_bridge.js\'s CPU/peripheral setup (same timers, ports, USART, ADC)', /new AVRTimer\(cpu, timer1Config\)/.test(src) && /new AVRUSART\(cpu, usart0Config, 16e6\)/.test(src));
+check('embedded firmware setup mirrors avr8js_sim_bridge.js\'s CPU/peripheral setup (same timers, ports, USART, ADC)', /new AVRTimer\(cpu, timer1Config\)/.test(src) && /new AVRUSART\(cpu, usart0Config, MHZ\)/.test(src));
 check('embedded firmware decodes servo angles from measured PWM pulses, same approach as the external bridge', /riseCycle\[port\]\[bit\] = cpu\.cycles/.test(src) && /MIN_PULSE_US = 544, MAX_PULSE_US = 2400/.test(src));
-check('embedded firmware load failure falls back gracefully (direct preview), doesn\'t break the feature', /hwFirmwareLoadFailed = true/.test(src) && /target = commandAngles/.test(src));
+check('embedded firmware load failure falls back gracefully (direct preview), doesn\'t break the feature', /hwFirmwareState = 'failed'/.test(src) && /let target = commandAngles/.test(src));
 check('sim preview always mirrors the real firmware\'s fixed 8-servo count, decoupled from the "servo count" field', /const n = HW_FIRMWARE_SERVO_COUNT;/.test(src) && /HW_FIRMWARE_SERVO_COUNT = 8/.test(src));
 check('commanded angles are resampled to the firmware\'s fixed servo count before being sent, not just truncated silently', /function resampleToFirmwareServoCount/.test(src));
 check('a visible status line tells the user which mode is actually active (real firmware vs. fallback vs. loading)', /id="hwFirmwareStatus"/.test(src) && /updateHwFirmwareStatusUi/.test(src));
-check('firmware tick is time-based off the real per-frame dt, not a fixed step count (stays real-time paced)', /HW_FW_MAX_CATCHUP_SEC/.test(src) && /elapsed = Math\.min\(dt, HW_FW_MAX_CATCHUP_SEC\)/.test(src));
+check('firmware runs in a dedicated Web Worker, not the main render loop (the actual fix for the reported sluggishness)', /new Worker\(URL\.createObjectURL\(blob\), \{ type: 'module' \}\)/.test(src));
+check('worker self-paces its own tick loop off real wall-clock time, independent of the main thread\'s frame rate', /MAX_CATCHUP_SEC = 0\.25/.test(src) && /startWall = performance\.now\(\)/.test(src));
+check('main thread reads the worker\'s latest decoded angles at near-zero cost instead of running the simulation itself', /target = hwFirmwareAngles/.test(src));
+check('commands to the worker are throttled (~20Hz), not posted every single render frame', /HW_FIRMWARE_COMMAND_INTERVAL = 0\.05/.test(src));
 if (fs.existsSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md'))) {
   const setupDoc = fs.readFileSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md'), 'utf8');
   check('AVR8JS_SETUP.md updated to present the embedded version as the default path, not just the external script', /don't need anything in this/.test(setupDoc) && /embedded/.test(setupDoc));
+}
+
+/* ===================== v1.21.0 — worker-isolated firmware sim + stem drift correction ===================== */
+sectionHeader('v1.21.0 — worker-isolated firmware sim + stem drift correction');
+check('stems get periodic drift correction during playback, not just a one-time align at load', /audioEngine\.stemSyncTimer \+= dt/.test(src) && /HW_STEM_SYNC_DRIFT_THRESHOLD/.test(src));
+check('drift correction only snaps when actually drifted beyond threshold, not every check (avoids audible stutter)', /Math\.abs\(playing\[i\]\.audioEl\.currentTime - refTime\) > HW_STEM_SYNC_DRIFT_THRESHOLD/.test(src));
+check('drift check itself is throttled (not every frame) — correction is cheap, checking needn\'t be constant', /HW_STEM_SYNC_CHECK_INTERVAL = 0\.5/.test(src));
+if (simBridgeSrc) {
+  check('external avr8js_sim_bridge.js untouched by the worker migration (independent Node process, not affected)', /new WebSocket\.Server/.test(simBridgeSrc));
 }
 
 /* ===================== Summary ===================== */

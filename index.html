@@ -166,7 +166,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.20.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.21.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -301,6 +301,7 @@ const audioEngine = {
   colEnergy: new Float32Array(GRID_COLS),
   stemsActive: false,
   stems: { vocals: null, drums: null, bass: null, other: null }, // lazily created per-stem state
+  stemSyncTimer: 0, // periodic drift-correction accumulator — see updateStemsFrame
 };
 
 /* ================= Hardware bridge (WebSerial -> Arduino servos) =================
@@ -428,6 +429,26 @@ function applySensorReading(norm){
    Loaded from a CDN (jsdelivr) at runtime, not bundled — if that fails
    (offline, CDN blocked), this falls back to the direct angle-mirror
    preview FORMFIND always had, rather than breaking outright. */
+/* ================= Embedded avr8js firmware simulation (Web Worker) =================
+   Runs formfind_servo.ino's REAL compiled firmware inside avr8js
+   (github.com/wokwi/avr8js, MIT — the same open-source AVR core that powers
+   Wokwi itself). Executes in a dedicated Web Worker, not the main thread —
+   the raw AVR instruction-stepping loop is real per-cycle CPU emulation and
+   was measurably heavy enough running on the main thread to compete with
+   the kinetic-sculpture render loop and with <audio> element scheduling
+   (reported as general sluggishness plus audible stem drift). Isolating it
+   in a worker means the main thread's per-frame cost for this feature is
+   just reading a small array — the actual simulation work no longer
+   competes with rendering or audio at all.
+   This is the exact same simulation formfind_servo/avr8js_sim_bridge.js
+   does from a terminal (same hex, same CPU/peripheral setup, same PWM-pulse
+   decode) — that external script + its own dashboard still work too, for a
+   separate window or a shareable ws:// endpoint.
+   avr8js itself loads from a CDN inside the worker at runtime (not via the
+   page's import map — worker-scoped import map support is inconsistent
+   across browsers, so the worker uses the full CDN URL directly). If that
+   fails (offline, CDN blocked), the preview falls back to the direct
+   angle-mirror behavior FORMFIND always had, rather than breaking. */
 const EMBEDDED_FIRMWARE_HEX = `:100000000C945F000C9447040C9420040C9487001B
 :100010000C9487000C9487000C9487000C946E0459
 :100020000C9487000C9487000C9487000C94EE04C9
@@ -813,8 +834,19 @@ const EMBEDDED_FIRMWARE_HEX = `:100000000C945F000C9447040C9420040C9487001B
 `;
 const HW_FIRMWARE_SERVO_COUNT = 8; // matches formfind_servo.ino's NUM_SERVOS/SERVO_PINS exactly — fixed by the real compiled firmware, not by the "servo count" field (that field still controls how many angles go out to real/external hardware; the embedded preview always mirrors the real 8-pin sketch)
 
+const HW_FIRMWARE_WORKER_SRC = `
+let cpu = null, avrInstruction = null, usart = null, adc = null;
+const decodedAngles = new Float64Array(8).fill(90);
+let rxQueue = [];
+const SERVO_PIN_MAP = [
+  { port: 'D', bit: 2 }, { port: 'D', bit: 3 }, { port: 'D', bit: 4 }, { port: 'D', bit: 5 },
+  { port: 'D', bit: 6 }, { port: 'D', bit: 7 }, { port: 'B', bit: 0 }, { port: 'B', bit: 1 },
+];
+const MIN_PULSE_US = 544, MAX_PULSE_US = 2400;
+const riseCycle = { D: new Array(8).fill(null), B: new Array(8).fill(null) };
+
 function loadIntelHex(source, target){
-  for(const line of source.split('\n')){
+  for(const line of source.split('\\n')){
     if(line[0] === ':' && line.substr(7, 2) === '00'){
       const bytes = parseInt(line.substr(1, 2), 16);
       const addr = parseInt(line.substr(3, 4), 16);
@@ -823,108 +855,118 @@ function loadIntelHex(source, target){
   }
 }
 
-let hwFirmware = null; // { avr, cpu, avrInstruction, usart, adc, decodedAngles, rxQueue, sensorPhase }
-let hwFirmwareLoadPromise = null;
-let hwFirmwareLoadFailed = false;
-
-async function ensureHwFirmware(){
-  if(hwFirmware) return hwFirmware;
-  if(hwFirmwareLoadFailed) return null;
-  if(!hwFirmwareLoadPromise){
-    hwFirmwareLoadPromise = (async () => {
-      try {
-        const avr = await import('avr8js');
-        const { CPU, avrInstruction, AVRIOPort, AVRTimer, AVRUSART, AVRADC,
-                portBConfig, portCConfig, portDConfig,
-                timer0Config, timer1Config, timer2Config,
-                usart0Config, adcConfig } = avr;
-
-        const FLASH_WORDS = 0x8000; // 32K words = 64KB, matches ATmega328p program space
-        const program = new Uint16Array(FLASH_WORDS);
-        loadIntelHex(EMBEDDED_FIRMWARE_HEX, new Uint8Array(program.buffer));
-
-        const cpu = new CPU(program);
-        new AVRTimer(cpu, timer0Config);
-        new AVRTimer(cpu, timer1Config); // the one Servo.h actually uses for pulse timing
-        new AVRTimer(cpu, timer2Config);
-        const portB = new AVRIOPort(cpu, portBConfig); // digital pins 8-13
-        new AVRIOPort(cpu, portCConfig); // A0-A5, not GPIO-decoded here
-        const portD = new AVRIOPort(cpu, portDConfig); // digital pins 0-7
-        const usart = new AVRUSART(cpu, usart0Config, 16e6);
-        const adc = new AVRADC(cpu, adcConfig);
-        adc.avcc = 5;
-
-        // Servo pin decode — identical approach to avr8js_sim_bridge.js: measure the real PWM
-        // pulse widths the firmware's real Servo-library Timer1 ISR puts on the pins, not the
-        // angle we asked for. SERVO_PINS = {2..9} in formfind_servo.ino.
-        const SERVO_PIN_MAP = [
-          { port: 'D', bit: 2 }, { port: 'D', bit: 3 }, { port: 'D', bit: 4 }, { port: 'D', bit: 5 },
-          { port: 'D', bit: 6 }, { port: 'D', bit: 7 }, { port: 'B', bit: 0 }, { port: 'B', bit: 1 },
-        ];
-        const MIN_PULSE_US = 544, MAX_PULSE_US = 2400; // Servo.h MIN/MAX_PULSE_WIDTH
-        const riseCycle = { D: new Array(8).fill(null), B: new Array(8).fill(null) };
-        const decodedAngles = new Float32Array(HW_FIRMWARE_SERVO_COUNT).fill(90);
-
-        function handlePortEdges(port, value, oldValue){
-          const changed = value ^ oldValue;
-          for(let bit = 0; bit < 8; bit++){
-            if(!((changed >> bit) & 1)) continue;
-            const isHigh = !!((value >> bit) & 1);
-            if(isHigh){
-              riseCycle[port][bit] = cpu.cycles;
-            } else if(riseCycle[port][bit] !== null){
-              const pulseUs = (cpu.cycles - riseCycle[port][bit]) / 16; // 16MHz -> 16 cycles/us
-              riseCycle[port][bit] = null;
-              const idx = SERVO_PIN_MAP.findIndex((m) => m.port === port && m.bit === bit);
-              if(idx !== -1 && pulseUs > 300 && pulseUs < 3000){ // sanity window, ignores non-servo glitches
-                const angle = Math.max(0, Math.min(180, ((pulseUs - MIN_PULSE_US) / (MAX_PULSE_US - MIN_PULSE_US)) * 180));
-                decodedAngles[idx] = angle;
-              }
-            }
-          }
-        }
-        portD.addListener((v, o) => handlePortEdges('D', v, o));
-        portB.addListener((v, o) => handlePortEdges('B', v, o));
-
-        hwFirmware = { avr, cpu, avrInstruction, usart, adc, decodedAngles, rxQueue: [], sensorPhase: 0 };
-        return hwFirmware;
-      } catch(err){
-        console.error('Embedded firmware simulator failed to load (falling back to direct preview):', err);
-        hwFirmwareLoadFailed = true;
-        return null;
+function handlePortEdges(port, value, oldValue){
+  const changed = value ^ oldValue;
+  for(let bit = 0; bit < 8; bit++){
+    if(!((changed >> bit) & 1)) continue;
+    const isHigh = !!((value >> bit) & 1);
+    if(isHigh){
+      riseCycle[port][bit] = cpu.cycles;
+    } else if(riseCycle[port][bit] !== null){
+      const pulseUs = (cpu.cycles - riseCycle[port][bit]) / 16;
+      riseCycle[port][bit] = null;
+      const idx = SERVO_PIN_MAP.findIndex((m) => m.port === port && m.bit === bit);
+      if(idx !== -1 && pulseUs > 300 && pulseUs < 3000){
+        decodedAngles[idx] = Math.max(0, Math.min(180, ((pulseUs - MIN_PULSE_US) / (MAX_PULSE_US - MIN_PULSE_US)) * 180));
       }
-    })();
-  }
-  return hwFirmwareLoadPromise;
-}
-
-const HW_FW_SUBSTEP_CYCLES = 200; // finer than one 115200-baud byte period (~1389 cycles), so queued serial bytes inject at genuine baud timing
-const HW_FW_MAX_CATCHUP_SEC = 0.1; // caps per-frame catch-up — this runs inside the main render loop, so a dropped frame shouldn't time-warp the firmware
-const HW_FW_MHZ = 16e6;
-
-function tickHwFirmware(fw, dt){
-  const elapsed = Math.min(dt, HW_FW_MAX_CATCHUP_SEC);
-  const targetCycles = fw.cpu.cycles + elapsed * HW_FW_MHZ;
-  while(fw.cpu.cycles < targetCycles){
-    const stepTarget = Math.min(targetCycles, fw.cpu.cycles + HW_FW_SUBSTEP_CYCLES);
-    while(fw.cpu.cycles < stepTarget){
-      fw.avrInstruction(fw.cpu);
-      fw.cpu.tick();
     }
-    if(fw.rxQueue.length && !fw.usart.rxBusy) fw.usart.writeByte(fw.rxQueue.shift());
   }
-  // Synthetic A0 sweep — same default avr8js_sim_bridge.js uses, purely so analogRead() and
-  // "Sensor drives" have something real (from the firmware's own analogRead(), not faked here)
-  // to report even with no physical potentiometer.
-  fw.sensorPhase = (fw.sensorPhase + dt) % 12;
-  const p = fw.sensorPhase < 6 ? fw.sensorPhase / 6 : (12 - fw.sensorPhase) / 6;
-  fw.adc.channelValues[0] = p * 5;
 }
 
-function sendHwFirmwareCommand(fw, angles){
-  const line = 'A' + angles.map((a) => Math.round(a)).join(',') + '\n';
-  for(const ch of line) fw.rxQueue.push(ch.charCodeAt(0) & 0xff);
+let ready = false;
+const SUBSTEP_CYCLES = 200, MAX_CATCHUP_SEC = 0.25, MHZ = 16e6;
+let startWall = null;
+let postCounter = 0;
+const POST_EVERY_N_TICKS = 12; // tick runs every 4ms internally; post decoded angles back roughly every ~48ms (~20Hz), not every tick
+
+function tick(){
+  const elapsedSec = (performance.now() - startWall) / 1000;
+  let targetCycles = Math.floor(elapsedSec * MHZ);
+  if(targetCycles - cpu.cycles > MAX_CATCHUP_SEC * MHZ) targetCycles = cpu.cycles + MAX_CATCHUP_SEC * MHZ;
+  while(cpu.cycles < targetCycles){
+    const stepTarget = Math.min(targetCycles, cpu.cycles + SUBSTEP_CYCLES);
+    while(cpu.cycles < stepTarget){ avrInstruction(cpu); cpu.tick(); }
+    if(rxQueue.length && !usart.rxBusy) usart.writeByte(rxQueue.shift());
+  }
+  const sensorPhase = (cpu.cycles / MHZ) % 12;
+  const p = sensorPhase < 6 ? sensorPhase / 6 : (12 - sensorPhase) / 6;
+  adc.channelValues[0] = p * 5;
+
+  postCounter++;
+  if(postCounter >= POST_EVERY_N_TICKS){
+    postCounter = 0;
+    self.postMessage({ type: 'angles', angles: Array.from(decodedAngles) });
+  }
 }
+
+self.onmessage = async (e) => {
+  const msg = e.data;
+  if(msg.type === 'init'){
+    try {
+      const avr = await import('https://cdn.jsdelivr.net/npm/avr8js@0.21.0/+esm');
+      const { CPU, avrInstruction: avrInstr, AVRIOPort, AVRTimer, AVRUSART, AVRADC,
+              portBConfig, portCConfig, portDConfig,
+              timer0Config, timer1Config, timer2Config,
+              usart0Config, adcConfig } = avr;
+      avrInstruction = avrInstr;
+      const program = new Uint16Array(0x8000);
+      loadIntelHex(msg.hex, new Uint8Array(program.buffer));
+      cpu = new CPU(program);
+      new AVRTimer(cpu, timer0Config);
+      new AVRTimer(cpu, timer1Config);
+      new AVRTimer(cpu, timer2Config);
+      const portB = new AVRIOPort(cpu, portBConfig);
+      new AVRIOPort(cpu, portCConfig);
+      const portD = new AVRIOPort(cpu, portDConfig);
+      usart = new AVRUSART(cpu, usart0Config, MHZ);
+      adc = new AVRADC(cpu, adcConfig);
+      adc.avcc = 5;
+      portD.addListener((v, o) => handlePortEdges('D', v, o));
+      portB.addListener((v, o) => handlePortEdges('B', v, o));
+      ready = true;
+      startWall = performance.now();
+      setInterval(tick, 4);
+      self.postMessage({ type: 'ready' });
+    } catch(err){
+      self.postMessage({ type: 'failed', message: String((err && err.message) || err) });
+    }
+  } else if(msg.type === 'command'){
+    if(!ready) return;
+    const line = 'A' + msg.angles.map((a) => Math.round(a)).join(',') + '\\n';
+    for(const ch of line) rxQueue.push(ch.charCodeAt(0) & 0xff);
+  }
+};
+`;
+
+let hwFirmwareWorker = null;
+let hwFirmwareState = 'idle'; // 'idle' | 'loading' | 'ready' | 'failed'
+let hwFirmwareAngles = null; // latest decoded angles from the worker, or null until the first message arrives
+
+function ensureHwFirmwareWorker(){
+  if(hwFirmwareWorker || hwFirmwareState === 'failed') return;
+  hwFirmwareState = 'loading';
+  try {
+    const blob = new Blob([HW_FIRMWARE_WORKER_SRC], { type: 'application/javascript' });
+    hwFirmwareWorker = new Worker(URL.createObjectURL(blob), { type: 'module' });
+    hwFirmwareWorker.onmessage = (e) => {
+      const msg = e.data;
+      if(msg.type === 'ready') hwFirmwareState = 'ready';
+      else if(msg.type === 'failed'){ hwFirmwareState = 'failed'; console.error('Embedded firmware worker failed to load (falling back to direct preview):', msg.message); }
+      else if(msg.type === 'angles') hwFirmwareAngles = msg.angles;
+    };
+    hwFirmwareWorker.onerror = (err) => {
+      hwFirmwareState = 'failed';
+      console.error('Embedded firmware worker error (falling back to direct preview):', err);
+    };
+    hwFirmwareWorker.postMessage({ type: 'init', hex: EMBEDDED_FIRMWARE_HEX });
+  } catch(err){
+    hwFirmwareState = 'failed';
+    console.error('Could not create firmware worker (falling back to direct preview):', err);
+  }
+}
+
+const HW_FIRMWARE_COMMAND_INTERVAL = 0.05; // ~20Hz — no need to postMessage a new command every single render frame
+let hwFirmwareCommandTimer = 0;
 
 function resampleToFirmwareServoCount(angles){
   const n = angles.length;
@@ -941,8 +983,8 @@ function updateHwFirmwareStatusUi(){
   const el = document.getElementById('hwFirmwareStatus');
   if(!el) return;
   let text;
-  if(hwFirmwareLoadFailed) text = 'Firmware simulator unavailable (couldn\'t load avr8js — offline, or the CDN is blocked) — showing a direct angle preview instead.';
-  else if(hwFirmware) text = 'Running the real compiled firmware (avr8js, embedded — no terminal needed).';
+  if(hwFirmwareState === 'failed') text = 'Firmware simulator unavailable (couldn\'t load avr8js — offline, or the CDN is blocked) — showing a direct angle preview instead.';
+  else if(hwFirmwareState === 'ready') text = 'Running the real compiled firmware (avr8js, in a background worker — no terminal needed).';
   else text = 'Loading firmware simulator…';
   if(text !== hwFirmwareStatusShown){ el.textContent = text; hwFirmwareStatusShown = text; }
 }
@@ -1207,18 +1249,22 @@ function updateHwSimulator(now, dt){
 
   // Command angles come from the same computeServoAngles() real/external hardware already uses
   // (same AGC, same servoCount) — resampled to exactly 8 to match the real firmware's fixed pin
-  // count, then actually sent through the real compiled firmware if it's loaded. If it isn't
-  // loaded yet (or failed to load — offline, CDN blocked), target falls back to the commanded
-  // angles directly, same as the app always did before this existed, so the preview never breaks.
+  // count, then sent to the worker running the real compiled firmware, throttled to ~20Hz (no
+  // need to postMessage a new command every single render frame). If the worker isn't ready yet
+  // (or failed to load — offline, CDN blocked), target falls back to the commanded angles
+  // directly, same as the app always did before this existed, so the preview never breaks.
   const commandAngles = resampleToFirmwareServoCount(computeServoAngles());
-  if(!hwFirmware && !hwFirmwareLoadFailed) ensureHwFirmware(); // fire-and-forget; memoized, only kicks off once
+  if(hwFirmwareState === 'idle') ensureHwFirmwareWorker(); // fire-and-forget; only kicks off once
   let target = commandAngles;
   hwSim.usingRealFirmware = false;
-  if(hwFirmware){
-    sendHwFirmwareCommand(hwFirmware, commandAngles);
-    tickHwFirmware(hwFirmware, dt);
-    target = hwFirmware.decodedAngles; // the real angle the real firmware's real PWM just emitted
+  if(hwFirmwareState === 'ready' && hwFirmwareAngles){
+    target = hwFirmwareAngles; // the real angle the real firmware's real PWM last emitted, read from the worker — no per-frame simulation cost on this thread
     hwSim.usingRealFirmware = true;
+    hwFirmwareCommandTimer += dt;
+    if(hwFirmwareCommandTimer > HW_FIRMWARE_COMMAND_INTERVAL){
+      hwFirmwareCommandTimer = 0;
+      hwFirmwareWorker.postMessage({ type: 'command', angles: commandAngles });
+    }
   }
   updateHwFirmwareStatusUi();
 
@@ -1444,6 +1490,9 @@ function accumulateColEnergy(freqData, colEnergyOut, dt){
   }
 }
 
+const HW_STEM_SYNC_CHECK_INTERVAL = 0.5; // seconds between drift checks — correction itself is cheap, but checking every frame isn't needed
+const HW_STEM_SYNC_DRIFT_THRESHOLD = 0.08; // 80ms — small enough to catch audible drift, large enough not to over-correct on normal jitter
+
 function updateStemsFrame(dt){
   STEM_KEYS.forEach(key => {
     const s = audioEngine.stems[key];
@@ -1454,6 +1503,26 @@ function updateStemsFrame(dt){
     s.energy = (sum / s.freqData.length) / 255;
     accumulateColEnergy(s.freqData, s.colEnergy, dt);
   });
+
+  // Periodic drift correction. Independent <audio> elements aren't locked to a shared clock —
+  // they can slowly drift apart during playback even under normal conditions, and drift gets
+  // worse if the main thread stalls for any reason (a heavy synchronous task delays each
+  // element's own playback scheduling unevenly). Stems were previously only aligned once, at
+  // load time; this keeps them within threshold continuously so vocals/drums/bass/other don't
+  // audibly separate over the length of a song.
+  audioEngine.stemSyncTimer += dt;
+  if(audioEngine.stemSyncTimer > HW_STEM_SYNC_CHECK_INTERVAL){
+    audioEngine.stemSyncTimer = 0;
+    const playing = STEM_KEYS.map((k) => audioEngine.stems[k]).filter((s) => s && !s.audioEl.paused);
+    if(playing.length > 1){
+      const refTime = playing[0].audioEl.currentTime;
+      for(let i = 1; i < playing.length; i++){
+        if(Math.abs(playing[i].audioEl.currentTime - refTime) > HW_STEM_SYNC_DRIFT_THRESHOLD){
+          playing[i].audioEl.currentTime = refTime;
+        }
+      }
+    }
+  }
 
   // Beat detection off the drums stem when present (best transient signal), else bass.
   const beatSource = audioEngine.stems.drums || audioEngine.stems.bass;
