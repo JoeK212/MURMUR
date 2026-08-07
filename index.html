@@ -156,7 +156,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.16.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.17.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -422,6 +422,33 @@ let hwSim = null; // { THREE, scene, camera, renderer, container, armPivots, cou
 // Flat "stick" geometry (thin boxes, not round cylinders) for the popsicle-stick look; heads and
 // hand-tips reuse the field's own sphere color as a small callback to the main sphere grid.
 const HW_LEG_LEN = 0.42, HW_ARM_LEN = 0.46, HW_TORSO_LEN = 0.6, HW_HIP_Y = 0.45;
+const HW_TRAIL_LAG = [0.30, 0.16, 0.09]; // 3 ghost arms, each lagging further behind the real one — a comet trail, not fake data
+const HW_TRAIL_OPACITY = [0.35, 0.20, 0.10];
+
+function hwPseudoRandom(seed){ // deterministic per-index "randomness" so re-running doesn't reshuffle character variation
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function hwBuildWoodTexture(THREE){
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#E3B77A';
+  ctx.fillRect(0, 0, 64, 64);
+  for(let i = 0; i < 10; i++){
+    const y = (i / 10) * 64 + hwPseudoRandom(i) * 4;
+    ctx.strokeStyle = i % 2 === 0 ? 'rgba(180,130,70,0.35)' : 'rgba(255,220,170,0.3)';
+    ctx.lineWidth = 1 + hwPseudoRandom(i + 50) * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    for(let x = 0; x <= 64; x += 8) ctx.lineTo(x, y + Math.sin(x * 0.3 + i) * 2);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
 
 function ensureHwSimScene(){
   if(!three || !three.THREE) return false; // main engine not loaded yet
@@ -435,7 +462,7 @@ function ensureHwSimScene(){
     container.innerHTML = '';
   }
 
-  const w = container.clientWidth || 400, h = 170;
+  const w = container.clientWidth || 400, h = 280; // bigger now that it has its own space below the main stage, not squeezed into the panel
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x060708);
 
@@ -460,29 +487,39 @@ function ensureHwSimScene(){
   renderer.setSize(w, h);
   container.appendChild(renderer.domElement);
 
-  const stickMat = new THREE.MeshStandardMaterial({ color: 0xE3B77A, metalness: 0.05, roughness: 0.85 }); // popsicle-wood tone
-  const accentMat = new THREE.MeshStandardMaterial({ color: BASE_SPHERE_COLOR, metalness: 0.85, roughness: 0.28 }); // heads/hands echo the main sphere field
-
+  const woodTex = hwBuildWoodTexture(THREE);
   const legGeo = new THREE.BoxGeometry(0.05, HW_LEG_LEN, 0.02);
   legGeo.translate(0, -HW_LEG_LEN / 2, 0); // pivot at hip end, extends downward
   const torsoGeo = new THREE.BoxGeometry(0.07, HW_TORSO_LEN, 0.03);
   torsoGeo.translate(0, HW_TORSO_LEN / 2, 0); // pivot at hip end, extends upward
   const armGeo = new THREE.BoxGeometry(0.045, HW_ARM_LEN, 0.02);
   armGeo.translate(0, -HW_ARM_LEN / 2, 0); // pivot at shoulder end, hangs downward by default
-  const headGeo = new THREE.SphereGeometry(0.13, 14, 10);
-  const handGeo = new THREE.SphereGeometry(0.065, 10, 8);
+  const groundGeo = new THREE.CircleGeometry(0.22, 16);
+  groundGeo.rotateX(-Math.PI / 2);
 
-  const armPivots = [];
-  const figureGroups = [];
-  const legLefts = [];
-  const legRights = [];
-  const restingArms = [];
+  const armPivots = [], figureGroups = [], legLefts = [], legRights = [], restingArms = [];
+  const headMats = [], handMats = [], headMeshes = [], handMeshes = [];
+  const trailArms = []; // [figureIndex][trailIndex] -> mesh
+  const trailAngles = []; // [figureIndex] -> Float32Array(3), lagged rotation state
   const LEG_BASE_DEG = 16, REST_ARM_BASE_DEG = -12;
+
   for(let i = 0; i < n; i++){
     const x = i * spacing - totalWidth / 2;
+    const rnd = hwPseudoRandom(i * 7.3); // 0..1, deterministic per figure — a little individuality, not noise every frame
+    const scale = 0.9 + rnd * 0.22; // slightly different builds per figure
+    const hueShift = (rnd - 0.5) * 0.06;
+
     const figure = new THREE.Group();
     figure.position.set(x, HW_HIP_Y, 0);
+    figure.scale.setScalar(scale);
     scene.add(figure);
+
+    const stickMat = new THREE.MeshStandardMaterial({ color: 0xE3B77A, metalness: 0.05, roughness: 0.85, map: woodTex });
+    stickMat.color.offsetHSL(hueShift, 0, 0); // per-figure so the row reads as individuals, not clones
+
+    const ground = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
+    ground.position.set(0, 0.005, 0);
+    figure.add(ground);
 
     const legLeft = new THREE.Mesh(legGeo, stickMat);
     legLeft.rotation.z = THREE.MathUtils.degToRad(LEG_BASE_DEG);
@@ -494,7 +531,10 @@ function ensureHwSimScene(){
     const torso = new THREE.Mesh(torsoGeo, stickMat);
     figure.add(torso);
 
-    const head = new THREE.Mesh(headGeo, accentMat);
+    // head/hand glow is driven by this figure's own real angle deviation from neutral — real data, not decorative
+    const headMat = new THREE.MeshStandardMaterial({ color: BASE_SPHERE_COLOR, metalness: 0.85, roughness: 0.28, emissive: BASE_SPHERE_COLOR, emissiveIntensity: 0 });
+    const handMat = headMat.clone();
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13 * (0.92 + rnd * 0.16), 14, 10), headMat);
     head.position.set(0, HW_TORSO_LEN + 0.16, 0);
     figure.add(head);
 
@@ -508,22 +548,44 @@ function ensureHwSimScene(){
     figure.add(pivot);
     const drivenArm = new THREE.Mesh(armGeo, stickMat);
     pivot.add(drivenArm);
-    const hand = new THREE.Mesh(handGeo, accentMat);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 8), handMat);
     hand.position.set(0, -HW_ARM_LEN, 0);
     pivot.add(hand);
+
+    // trailing ghost arms — a fading comet trail behind the real arm's recent motion
+    const ghostMat = new THREE.MeshBasicMaterial({ color: 0xE3B77A, transparent: true });
+    const figureTrails = [];
+    for(let g = 0; g < HW_TRAIL_LAG.length; g++){
+      const gPivot = new THREE.Group();
+      gPivot.position.set(0, HW_TORSO_LEN, 0);
+      figure.add(gPivot);
+      const gArm = new THREE.Mesh(armGeo, ghostMat.clone());
+      gArm.material.opacity = HW_TRAIL_OPACITY[g];
+      gPivot.add(gArm);
+      figureTrails.push(gPivot);
+    }
 
     armPivots.push(pivot);
     figureGroups.push(figure);
     legLefts.push(legLeft);
     legRights.push(legRight);
     restingArms.push(restingArm);
+    headMats.push(headMat);
+    handMats.push(handMat);
+    trailArms.push(figureTrails);
+    trailAngles.push(new Float32Array(HW_TRAIL_LAG.length).fill(90));
   }
 
   const prevAngles = hwSim ? hwSim.currentAngles : null;
   const currentAngles = new Float32Array(n).fill(90);
   if(prevAngles) currentAngles.set(prevAngles.subarray(0, Math.min(n, prevAngles.length)));
 
-  hwSim = { THREE, scene, camera, renderer, container, armPivots, figureGroups, legLefts, legRights, restingArms, count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side') };
+  hwSim = {
+    THREE, scene, camera, renderer, container, armPivots, figureGroups, legLefts, legRights, restingArms,
+    headMats, handMats, trailArms, trailAngles,
+    sparkT: new Float32Array(n).fill(-1), // -1 = not currently sparking
+    count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side'),
+  };
   setHwSimView(hwSim.viewMode);
   return true;
 }
@@ -545,30 +607,66 @@ function setHwSimView(mode){
 // across the row. Purely decorative (driven by elapsed time, not by any servo data) so the
 // figures read as "alive" even when the driven arm itself is sitting near neutral; the driven
 // arm's own rotation (below) is the only part of this animation tied to real angle data.
+// When a real bridge is actually connected (hardwareEngine.connected), the idle motion picks up —
+// real data, since it reflects whether this preview is standing in for actual hardware right now.
 const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.035;
 const HW_IDLE_LEG_HZ = 0.55, HW_IDLE_LEG_AMPLITUDE_DEG = 5;
 const HW_IDLE_REST_ARM_HZ = 0.35, HW_IDLE_REST_ARM_AMPLITUDE_DEG = 9;
+const HW_SPARK_THRESHOLD_DEG = 3; // how close to 0/180 counts as "hit the extreme"
+const HW_SPARK_DURATION = 0.4; // seconds
 
 function updateHwSimulator(now, dt){
   if(!hardwareEngine.simulate) return;
   if(!ensureHwSimScene()) return;
   const target = computeServoAngles();
   const maxStep = HW_SERVO_SLEW_DEG_PER_SEC * dt; // real servos can't snap instantly to a new angle
+  const moodMul = hardwareEngine.connected ? 1.4 : 1.0; // perk up when an actual rig/bridge is connected
+  const tSec = now / 1000;
   for(let i = 0; i < hwSim.count; i++){
     const cur = hwSim.currentAngles[i];
     const tgt = target[i] !== undefined ? target[i] : 90;
     const step = Math.max(-maxStep, Math.min(maxStep, tgt - cur));
+    const prevAngle = cur;
     hwSim.currentAngles[i] = cur + step;
-    hwSim.armPivots[i].rotation.z = hwSim.THREE.MathUtils.degToRad(hwSim.currentAngles[i] - 90); // the one real-data-driven rotation
+    const angle = hwSim.currentAngles[i];
+    hwSim.armPivots[i].rotation.z = hwSim.THREE.MathUtils.degToRad(angle - 90); // the one real-data-driven rotation
+
+    // Trailing ghost arms — first-order lag toward the real angle, each slower than the last
+    const trail = hwSim.trailAngles[i];
+    for(let g = 0; g < trail.length; g++){
+      trail[g] += (angle - trail[g]) * HW_TRAIL_LAG[g];
+      hwSim.trailArms[i][g].rotation.z = hwSim.THREE.MathUtils.degToRad(trail[g] - 90);
+    }
+
+    // Head/hand glow — intensity driven by this figure's own angle deviation from neutral (real data)
+    const deviation = Math.abs(angle - 90) / 90; // 0..1
+    hwSim.headMats[i].emissiveIntensity = deviation * 0.9;
+    hwSim.handMats[i].emissiveIntensity = deviation * 0.9;
+
+    // Milestone spark when a figure actually reaches a real extreme (0° or 180°)
+    const nearExtreme = angle < HW_SPARK_THRESHOLD_DEG || angle > 180 - HW_SPARK_THRESHOLD_DEG;
+    const wasNearExtreme = prevAngle < HW_SPARK_THRESHOLD_DEG || prevAngle > 180 - HW_SPARK_THRESHOLD_DEG;
+    if(nearExtreme && !wasNearExtreme) hwSim.sparkT[i] = 0;
+    if(hwSim.sparkT[i] >= 0){
+      hwSim.sparkT[i] += dt;
+      const p = hwSim.sparkT[i] / HW_SPARK_DURATION;
+      if(p >= 1){
+        hwSim.sparkT[i] = -1;
+        hwSim.handMats[i].emissiveIntensity = deviation * 0.9;
+      } else {
+        const flash = 1 - p;
+        hwSim.handMats[i].emissiveIntensity = Math.max(deviation * 0.9, flash * 2.2);
+      }
+    }
 
     // Idle secondary motion, phase-offset per figure so the row reads as a wave, not a lockstep twitch
-    const tSec = now / 1000, phase = i * 0.5;
-    const bob = Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + phase) * HW_IDLE_BOB_AMPLITUDE;
+    const phase = i * 0.5;
+    const bob = Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + phase) * HW_IDLE_BOB_AMPLITUDE * moodMul;
     hwSim.figureGroups[i].position.y = HW_HIP_Y + bob;
-    const legSwing = Math.sin(tSec * HW_IDLE_LEG_HZ * Math.PI * 2 + phase) * HW_IDLE_LEG_AMPLITUDE_DEG;
+    const legSwing = Math.sin(tSec * HW_IDLE_LEG_HZ * Math.PI * 2 + phase) * HW_IDLE_LEG_AMPLITUDE_DEG * moodMul;
     hwSim.legLefts[i].rotation.z = hwSim.THREE.MathUtils.degToRad(16 + legSwing);
     hwSim.legRights[i].rotation.z = hwSim.THREE.MathUtils.degToRad(-16 - legSwing);
-    const restSwing = Math.sin(tSec * HW_IDLE_REST_ARM_HZ * Math.PI * 2 + phase * 1.3) * HW_IDLE_REST_ARM_AMPLITUDE_DEG;
+    const restSwing = Math.sin(tSec * HW_IDLE_REST_ARM_HZ * Math.PI * 2 + phase * 1.3) * HW_IDLE_REST_ARM_AMPLITUDE_DEG * moodMul;
     hwSim.restingArms[i].rotation.z = hwSim.THREE.MathUtils.degToRad(-12 + restSwing);
   }
   hwSim.renderer.render(hwSim.scene, hwSim.camera);
@@ -1152,6 +1250,14 @@ function renderHome(){
       <div id="stageHint">drag to orbit &middot; scroll to zoom</div>
     </div>
 
+    <div id="hwSimWrap" style="display:none; flex-direction:column; margin:0 0 18px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <span style="font-size:12px; font-weight:600; letter-spacing:0.04em; color:var(--ink-soft); text-transform:uppercase;">Simulated rig — no hardware needed</span>
+        <button class="btn ghost" id="hwSimViewBtn" style="padding:5px 12px; font-size:12px;">Angled view</button>
+      </div>
+      <div id="hwSimViewport" style="width:100%; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);"></div>
+    </div>
+
     <div class="panel">
       <div class="row">
         <div class="label">Mode</div>
@@ -1285,12 +1391,8 @@ function renderHome(){
       <div class="row" style="align-items:center;">
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); cursor:pointer;">
           <input type="checkbox" id="hwSimulateToggle">
-          Show simulated rig (3D preview, popsicle-stick figures with one waving arm each — no hardware needed)
+          Show simulated rig (3D preview, popsicle-stick figures with one waving arm each — appears below the main view above)
         </label>
-      </div>
-      <div class="row" id="hwSimWrap" style="display:none; margin-top:4px; flex-direction:column;">
-        <div id="hwSimViewport" style="width:100%; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);"></div>
-        <button class="btn ghost" id="hwSimViewBtn" style="align-self:flex-start; margin-top:6px;">Angled view</button>
       </div>
     </div>
   `;

@@ -224,6 +224,25 @@ if (simBridgeSrc) {
   check('avr8js dashboard: idle motion explicitly documented as decorative, not real data', /decorative only/.test(simBridgeSrc) && /just decoration/.test(simBridgeSrc));
 }
 
+/* ===================== v1.17.0 — layout move + six "stand out" enhancements ===================== */
+sectionHeader('v1.17.0 — layout move + six "stand out" enhancements');
+check('3D preview moved out of the control panel to sit directly below the main kinetic-sculpture stage', /<div id="stage">[\s\S]{0,300}<div id="hwSimWrap"/.test(src));
+check('3D preview viewport enlarged now that it has its own space (was fixed h=170)', /h = 280/.test(src));
+check('3D preview: motion trails (lagged ghost arms) implemented', /HW_TRAIL_LAG/.test(src) && /trailArms/.test(src));
+check('3D preview: head/hand glow driven by each figure\'s own real angle deviation, not decoration', /emissiveIntensity = deviation/.test(src));
+check('3D preview: ground shadow + wood-grain texture added', /hwBuildWoodTexture/.test(src) && /groundGeo/.test(src));
+check('3D preview: per-figure character variation (deterministic, not per-frame random)', /hwPseudoRandom/.test(src) && /offsetHSL/.test(src));
+check('3D preview: connection-status mood uses hardwareEngine.connected (real data), not a fake toggle', /hardwareEngine\.connected \? 1\.4 : 1\.0/.test(src));
+check('3D preview: milestone spark triggers only on a real extreme crossing (0°/180°), with hysteresis against re-triggering every frame', /HW_SPARK_THRESHOLD_DEG/.test(src) && /wasNearExtreme = prevAngle/.test(src));
+if (simBridgeSrc) {
+  check('avr8js dashboard: motion trails (lagged ghost arms) implemented', /TRAIL_LAG/.test(simBridgeSrc) && /trailLines/.test(simBridgeSrc));
+  check('avr8js dashboard: head glow driven by real angle deviation; background pulse driven by the real A0 sensor reading', /deviation = Math\.abs\(deg - 90\)/.test(simBridgeSrc) && /data\.sensor \/ 1023\) \* 0\.16/.test(simBridgeSrc));
+  check('avr8js dashboard: ground shadow + wood-grain <pattern> added, defined in a proper shared <svg> root', /woodGrain/.test(simBridgeSrc) && /defsSvg = document\.createElementNS/.test(simBridgeSrc));
+  check('avr8js dashboard: per-figure character variation (deterministic pseudoRandom, not per-frame noise)', /function pseudoRandom/.test(simBridgeSrc));
+  check('avr8js dashboard: connection-status mood (.asleep class) driven by the real formfindConnected flag', /rig\.classList\.toggle\('asleep', !connected\)/.test(simBridgeSrc));
+  check('avr8js dashboard: milestone spark class only re-triggers on a genuine extreme crossing, not every frame at the extreme', /wasNearExtreme\[i\] = nearExtreme/.test(simBridgeSrc));
+}
+
 /* ===================== Summary ===================== */
 console.log(`\n${BOLD}${'-'.repeat(40)}${RESET}`);
 console.log(`${GREEN}${pass} passed${RESET}, ${fail ? RED : DIM}${fail} failed${RESET}`);
