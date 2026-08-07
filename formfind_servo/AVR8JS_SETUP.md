@@ -21,7 +21,7 @@ retired; this script replaces it entirely and needs none of that.
 2. `node avr8js_sim_bridge.js` — it prints `Listening on ws://localhost:8765`
    and starts streaming live servo angles and sim time to the terminal
 3. Open **http://localhost:8766** in a browser tab — a live dashboard with
-   8 rotating servo arms, updating in real time
+   popsicle-stick figures, one per servo, each waving an arm in real time
 4. In FORMFIND's Physical Rig panel, click **"Connect via Simulator Bridge"** —
    the URL field already defaults to `ws://localhost:8765`
 5. Switch modes / play audio in FORMFIND — both the terminal's servo-angle
@@ -38,8 +38,8 @@ restart the bridge script while the tab stays open.
 
 A self-served page — no separate install, no build step. It shows:
 
-- 8 servo arms, each rotating to match the real angle measured off that
-  servo's real PWM pulse, updated ~20x/second
+- 8 popsicle-stick figures, each figure's one arm rotating to match the real
+  angle measured off that servo's real PWM pulse, updated ~20x/second
 - Sim time and the current A0 sensor reading (see below)
 - Whether FORMFIND is actually connected right now
 
@@ -82,9 +82,8 @@ all. Pass `--dashboard-port=9000` to use a different port, or
 
 ## If you want to see the physical wiring layout too
 
-This script's dashboard shows 8 abstract arms, not a rendered board. For a
-visual of the actual wiring (board, servo parts, pin connections), FORMFIND's
-Physical Rig panel also has a static Wokwi circuit embed — paste a
-wokwi.com project link there. It's not live-linked to anything (deliberately
-— see `WOKWI_SETUP.md`), just a wiring reference to look at alongside this
-script's live dashboard.
+This script's dashboard shows abstract stick figures, not a rendered board.
+FORMFIND doesn't have an in-app view of the physical wiring anymore — if you
+want that, build the wiring yourself in a Wokwi project (paste
+`formfind_servo.ino` into a new Arduino Uno project at wokwi.com and wire up
+8 servos on pins 2-9) and just keep that tab open alongside this dashboard.

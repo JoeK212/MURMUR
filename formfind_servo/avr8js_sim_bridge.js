@@ -311,11 +311,11 @@ function buildDashboardHtml(numServos) {
   .dot{width:7px; height:7px; border-radius:50%; background:#555; flex:none;}
   .dot.live{background:var(--accent); box-shadow:0 0 8px var(--accent-deep);}
   .rig{
-    display:flex; gap:22px; flex-wrap:wrap; justify-content:center;
+    display:flex; gap:18px; flex-wrap:wrap; justify-content:center;
     background:var(--paper-deep); border:1px solid var(--line); border-radius:14px;
     padding:32px 24px 20px;
   }
-  .servo{display:flex; flex-direction:column; align-items:center; gap:8px; width:64px;}
+  .servo{display:flex; flex-direction:column; align-items:center; gap:8px; width:56px;}
   .servo .angle{font-size:12px; color:var(--accent); font-variant-numeric:tabular-nums; min-height:16px;}
   .servo .idx{font-size:10px; color:var(--ink-soft); letter-spacing:0.05em;}
   svg{overflow:visible;}
@@ -325,7 +325,7 @@ function buildDashboardHtml(numServos) {
 </head>
 <body>
   <h1>FORMFIND — avr8js live rig</h1>
-  <p class="sub">Every arm below is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock.</p>
+  <p class="sub">Every figure below is a popsicle-stick person whose arm is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock.</p>
   <div class="statusRow">
     <div class="stat"><span class="dot" id="dashDot"></span> dashboard <b id="dashState">connecting…</b></div>
     <div class="stat"><span class="dot" id="ffDot"></span> FORMFIND <b id="ffState">not connected</b></div>
@@ -341,36 +341,56 @@ function buildDashboardHtml(numServos) {
   const rig = document.getElementById('rig');
   const arms = [];
   const labels = [];
+  const STICK = '#E3B77A'; // popsicle-wood tone, matches the Three.js preview's stickMat
 
   for (let i = 0; i < NUM; i++) {
     const wrap = document.createElement('div');
     wrap.className = 'servo';
     const svgns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgns, 'svg');
-    svg.setAttribute('width', '56'); svg.setAttribute('height', '70'); svg.setAttribute('viewBox', '0 0 56 70');
+    svg.setAttribute('width', '52'); svg.setAttribute('height', '84'); svg.setAttribute('viewBox', '0 0 52 84');
 
-    const post = document.createElementNS(svgns, 'rect');
-    post.setAttribute('x', '24'); post.setAttribute('y', '40'); post.setAttribute('width', '8'); post.setAttribute('height', '26');
-    post.setAttribute('rx', '2'); post.setAttribute('fill', '#23262C');
-    svg.appendChild(post);
+    // legs (static) — hip at (26,50) down to feet at y=76
+    const legL = document.createElementNS(svgns, 'line');
+    legL.setAttribute('x1', '26'); legL.setAttribute('y1', '50'); legL.setAttribute('x2', '18'); legL.setAttribute('y2', '76');
+    legL.setAttribute('stroke', STICK); legL.setAttribute('stroke-width', '3'); legL.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(legL);
+    const legR = document.createElementNS(svgns, 'line');
+    legR.setAttribute('x1', '26'); legR.setAttribute('y1', '50'); legR.setAttribute('x2', '34'); legR.setAttribute('y2', '76');
+    legR.setAttribute('stroke', STICK); legR.setAttribute('stroke-width', '3'); legR.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(legR);
 
-    const pivot = document.createElementNS(svgns, 'circle');
-    pivot.setAttribute('cx', '28'); pivot.setAttribute('cy', '40'); pivot.setAttribute('r', '4');
-    pivot.setAttribute('fill', '#8A8F98');
-    svg.appendChild(pivot);
+    // torso (static) — hip (26,50) up to shoulder (26,26)
+    const torso = document.createElementNS(svgns, 'line');
+    torso.setAttribute('x1', '26'); torso.setAttribute('y1', '50'); torso.setAttribute('x2', '26'); torso.setAttribute('y2', '26');
+    torso.setAttribute('stroke', STICK); torso.setAttribute('stroke-width', '4'); torso.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(torso);
 
+    // head (static)
+    const head = document.createElementNS(svgns, 'circle');
+    head.setAttribute('cx', '26'); head.setAttribute('cy', '14'); head.setAttribute('r', '8');
+    head.setAttribute('fill', 'var(--accent)');
+    svg.appendChild(head);
+
+    // resting arm (static) — a fixed second arm so it reads as a figure, not just one stick with an arm
+    const restArm = document.createElementNS(svgns, 'line');
+    restArm.setAttribute('x1', '26'); restArm.setAttribute('y1', '26'); restArm.setAttribute('x2', '32'); restArm.setAttribute('y2', '46');
+    restArm.setAttribute('stroke', STICK); restArm.setAttribute('stroke-width', '3'); restArm.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(restArm);
+
+    // driven arm — pivots at the shoulder (26,26); hangs straight down by default (0-180 servo -> ±90° swing)
     const armGroup = document.createElementNS(svgns, 'g');
     armGroup.setAttribute('class', 'arm');
-    armGroup.style.transformOrigin = '28px 40px';
+    armGroup.style.transformOrigin = '26px 26px';
     const armLine = document.createElementNS(svgns, 'line');
-    armLine.setAttribute('x1', '28'); armLine.setAttribute('y1', '40');
-    armLine.setAttribute('x2', '28'); armLine.setAttribute('y2', '10');
-    armLine.setAttribute('stroke', '#7DD3FC'); armLine.setAttribute('stroke-width', '3'); armLine.setAttribute('stroke-linecap', 'round');
+    armLine.setAttribute('x1', '26'); armLine.setAttribute('y1', '26');
+    armLine.setAttribute('x2', '26'); armLine.setAttribute('y2', '48');
+    armLine.setAttribute('stroke', STICK); armLine.setAttribute('stroke-width', '3'); armLine.setAttribute('stroke-linecap', 'round');
     armGroup.appendChild(armLine);
-    const armEnd = document.createElementNS(svgns, 'circle');
-    armEnd.setAttribute('cx', '28'); armEnd.setAttribute('cy', '10'); armEnd.setAttribute('r', '3.5');
-    armEnd.setAttribute('fill', '#38BDF8');
-    armGroup.appendChild(armEnd);
+    const hand = document.createElementNS(svgns, 'circle');
+    hand.setAttribute('cx', '26'); hand.setAttribute('cy', '48'); hand.setAttribute('r', '3.2');
+    hand.setAttribute('fill', 'var(--accent-deep)');
+    armGroup.appendChild(hand);
     svg.appendChild(armGroup);
 
     wrap.appendChild(svg);
@@ -387,7 +407,7 @@ function buildDashboardHtml(numServos) {
   }
 
   function setAngle(i, deg) {
-    // 0-180 servo angle -> arm rotation, 90deg = straight up (neutral boot position)
+    // 0-180 servo angle -> arm rotation, 90deg = hanging straight down (neutral boot position)
     const rotation = deg - 90;
     arms[i].style.transform = 'rotate(' + rotation + 'deg)';
     labels[i].textContent = deg + '°';
