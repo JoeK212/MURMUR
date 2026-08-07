@@ -156,7 +156,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.15.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.16.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -473,6 +473,11 @@ function ensureHwSimScene(){
   const handGeo = new THREE.SphereGeometry(0.065, 10, 8);
 
   const armPivots = [];
+  const figureGroups = [];
+  const legLefts = [];
+  const legRights = [];
+  const restingArms = [];
+  const LEG_BASE_DEG = 16, REST_ARM_BASE_DEG = -12;
   for(let i = 0; i < n; i++){
     const x = i * spacing - totalWidth / 2;
     const figure = new THREE.Group();
@@ -480,10 +485,10 @@ function ensureHwSimScene(){
     scene.add(figure);
 
     const legLeft = new THREE.Mesh(legGeo, stickMat);
-    legLeft.rotation.z = THREE.MathUtils.degToRad(16);
+    legLeft.rotation.z = THREE.MathUtils.degToRad(LEG_BASE_DEG);
     figure.add(legLeft);
     const legRight = new THREE.Mesh(legGeo, stickMat);
-    legRight.rotation.z = THREE.MathUtils.degToRad(-16);
+    legRight.rotation.z = THREE.MathUtils.degToRad(-LEG_BASE_DEG);
     figure.add(legRight);
 
     const torso = new THREE.Mesh(torsoGeo, stickMat);
@@ -493,12 +498,12 @@ function ensureHwSimScene(){
     head.position.set(0, HW_TORSO_LEN + 0.16, 0);
     figure.add(head);
 
-    const restingArm = new THREE.Mesh(armGeo, stickMat); // static, just for a two-armed silhouette
+    const restingArm = new THREE.Mesh(armGeo, stickMat); // idle-swaying, not servo-driven — just a two-armed silhouette
     restingArm.position.set(0, HW_TORSO_LEN, 0);
-    restingArm.rotation.z = THREE.MathUtils.degToRad(-12);
+    restingArm.rotation.z = THREE.MathUtils.degToRad(REST_ARM_BASE_DEG);
     figure.add(restingArm);
 
-    const pivot = new THREE.Group(); // the servo-driven arm
+    const pivot = new THREE.Group(); // the servo-driven arm — this one's rotation is the only thing derived from real data
     pivot.position.set(0, HW_TORSO_LEN, 0);
     figure.add(pivot);
     const drivenArm = new THREE.Mesh(armGeo, stickMat);
@@ -508,13 +513,17 @@ function ensureHwSimScene(){
     pivot.add(hand);
 
     armPivots.push(pivot);
+    figureGroups.push(figure);
+    legLefts.push(legLeft);
+    legRights.push(legRight);
+    restingArms.push(restingArm);
   }
 
   const prevAngles = hwSim ? hwSim.currentAngles : null;
   const currentAngles = new Float32Array(n).fill(90);
   if(prevAngles) currentAngles.set(prevAngles.subarray(0, Math.min(n, prevAngles.length)));
 
-  hwSim = { THREE, scene, camera, renderer, container, armPivots, count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side') };
+  hwSim = { THREE, scene, camera, renderer, container, armPivots, figureGroups, legLefts, legRights, restingArms, count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side') };
   setHwSimView(hwSim.viewMode);
   return true;
 }
@@ -532,6 +541,14 @@ function setHwSimView(mode){
   if(btn) btn.textContent = mode === 'angle' ? 'Side view' : 'Angled view';
 }
 
+// Idle secondary motion — a gentle bob/sway/leg-shift, phase-offset per figure for a wave effect
+// across the row. Purely decorative (driven by elapsed time, not by any servo data) so the
+// figures read as "alive" even when the driven arm itself is sitting near neutral; the driven
+// arm's own rotation (below) is the only part of this animation tied to real angle data.
+const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.035;
+const HW_IDLE_LEG_HZ = 0.55, HW_IDLE_LEG_AMPLITUDE_DEG = 5;
+const HW_IDLE_REST_ARM_HZ = 0.35, HW_IDLE_REST_ARM_AMPLITUDE_DEG = 9;
+
 function updateHwSimulator(now, dt){
   if(!hardwareEngine.simulate) return;
   if(!ensureHwSimScene()) return;
@@ -542,7 +559,17 @@ function updateHwSimulator(now, dt){
     const tgt = target[i] !== undefined ? target[i] : 90;
     const step = Math.max(-maxStep, Math.min(maxStep, tgt - cur));
     hwSim.currentAngles[i] = cur + step;
-    hwSim.armPivots[i].rotation.z = hwSim.THREE.MathUtils.degToRad(hwSim.currentAngles[i] - 90);
+    hwSim.armPivots[i].rotation.z = hwSim.THREE.MathUtils.degToRad(hwSim.currentAngles[i] - 90); // the one real-data-driven rotation
+
+    // Idle secondary motion, phase-offset per figure so the row reads as a wave, not a lockstep twitch
+    const tSec = now / 1000, phase = i * 0.5;
+    const bob = Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + phase) * HW_IDLE_BOB_AMPLITUDE;
+    hwSim.figureGroups[i].position.y = HW_HIP_Y + bob;
+    const legSwing = Math.sin(tSec * HW_IDLE_LEG_HZ * Math.PI * 2 + phase) * HW_IDLE_LEG_AMPLITUDE_DEG;
+    hwSim.legLefts[i].rotation.z = hwSim.THREE.MathUtils.degToRad(16 + legSwing);
+    hwSim.legRights[i].rotation.z = hwSim.THREE.MathUtils.degToRad(-16 - legSwing);
+    const restSwing = Math.sin(tSec * HW_IDLE_REST_ARM_HZ * Math.PI * 2 + phase * 1.3) * HW_IDLE_REST_ARM_AMPLITUDE_DEG;
+    hwSim.restingArms[i].rotation.z = hwSim.THREE.MathUtils.degToRad(-12 + restSwing);
   }
   hwSim.renderer.render(hwSim.scene, hwSim.camera);
 }

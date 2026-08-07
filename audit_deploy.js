@@ -214,6 +214,16 @@ if (simBridgeSrc) {
   check('avr8js live dashboard also rebuilt as popsicle-stick figures', /popsicle-stick person/.test(simBridgeSrc) && /const STICK = /.test(simBridgeSrc));
 }
 
+/* ===================== v1.16.0 — idle secondary motion ===================== */
+sectionHeader('v1.16.0 — idle secondary motion');
+check('3D preview: idle bob/leg-sway/resting-arm-sway constants defined, phase-offset per figure', /HW_IDLE_BOB_HZ/.test(src) && /HW_IDLE_LEG_HZ/.test(src) && /phase = i \* 0\.5/.test(src));
+check('3D preview: idle motion is separate from the real-data-driven arm rotation (armPivots line unchanged in intent)', /the one real-data-driven rotation/.test(src));
+if (simBridgeSrc) {
+  check('avr8js dashboard: idle bob/leg-sway/resting-arm-sway CSS keyframes defined', /@keyframes idleBob/.test(simBridgeSrc) && /@keyframes legSwingL/.test(simBridgeSrc) && /@keyframes restArmSway/.test(simBridgeSrc));
+  check('avr8js dashboard: each figure gets a phase-offset animation-delay for a wave effect, not lockstep', /animationDelay = delay/.test(simBridgeSrc));
+  check('avr8js dashboard: idle motion explicitly documented as decorative, not real data', /decorative only/.test(simBridgeSrc) && /just decoration/.test(simBridgeSrc));
+}
+
 /* ===================== Summary ===================== */
 console.log(`\n${BOLD}${'-'.repeat(40)}${RESET}`);
 console.log(`${GREEN}${pass} passed${RESET}, ${fail ? RED : DIM}${fail} failed${RESET}`);
