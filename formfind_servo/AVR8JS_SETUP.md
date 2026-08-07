@@ -1,21 +1,29 @@
-# FORMFIND servo rig — avr8js simulator bridge
+# FORMFIND servo rig — avr8js simulator
 
 Runs `formfind_servo.ino`'s real, compiled firmware inside `avr8js`
 (github.com/wokwi/avr8js — the open-source, MIT-licensed AVR simulation
-core that powers Wokwi itself) and bridges it to FORMFIND over a plain
-WebSocket. No Wokwi account, no VS Code, no RFC2217, no virtual COM port,
-no driver signing — just Node.js.
+core that powers Wokwi itself). No Wokwi account, no VS Code, no RFC2217,
+no virtual COM port, no driver signing.
 
-This is the only WebSocket bridge backend in the project now — an earlier
-version (`wokwi_ws_bridge.py`) relayed to a real Wokwi cloud simulation
-instead, but it depended on the Wokwi VS Code extension's RFC2217 support,
-which hit three separate infrastructure walls in testing (a virtual-COM-port
-driver that wouldn't load, a Secure Boot policy blocking the workaround, and
-finally the extension not opening its own relay port at all). It's been
-retired; this script replaces it entirely and needs none of that.
+**As of FORMFIND's embedded simulator, you don't need anything in this
+folder for the everyday "watch the sim" experience.** Just open
+`index.html` and check "Show simulated rig" — the exact same avr8js +
+compiled hex setup described below now runs directly inside that page
+(loaded from a CDN at runtime), no terminal, no `npm install`, no Node.js.
+If it can't load (offline, CDN blocked), it falls back automatically to a
+direct angle preview rather than breaking.
 
+This folder's `avr8js_sim_bridge.js` still exists and still works — reach
+for it when you specifically want:
+- A **separate window/monitor** for the sim, independent of the FORMFIND tab
+- A **`ws://` endpoint** other tools can connect to (not just FORMFIND)
+- The **terminal readout** of live servo angles and sim time
 
-## Setup
+Run one or the other for the visual — not both at once if pointing them at
+the same FORMFIND instance is confusing, though nothing will actually
+break; they're independent simulations of the same firmware.
+
+## Setup (external script, optional)
 
 1. `cd formfind_servo && npm install` (installs `avr8js` and `ws`)
 2. `node avr8js_sim_bridge.js` — it prints `Listening on ws://localhost:8765`
@@ -43,47 +51,50 @@ A self-served page — no separate install, no build step. It shows:
 - Sim time and the current A0 sensor reading (see below)
 - Whether FORMFIND is actually connected right now
 
-This is a different thing from FORMFIND's own "Show simulated rig"
-checkbox: that one mirrors FORMFIND's *on-screen* state directly, with no
-firmware involved. This dashboard only ever shows what the real firmware
-actually did with the angles it was sent — if there's a bug in
-`formfind_servo.ino`'s handling, this dashboard shows the bug; the
-on-screen checkbox never would, because it doesn't run the firmware at
-all. Pass `--dashboard-port=9000` to use a different port, or
-`--no-dashboard` to skip serving it entirely.
-
 ## What's real vs. simulated here
 
+Applies equally to the embedded version and this external script — same
+hex, same CPU/peripheral setup, same PWM decode:
+
 - **The firmware itself: real.** `formfind_servo.hex` (prebuilt in this
-  folder) is compiled from the actual `formfind_servo.ino` using the real
-  AVR toolchain (avr-gcc/avr-libc) against the real Arduino core and Servo
+  folder, and inlined directly into `index.html` for the embedded version)
+  is compiled from the actual `formfind_servo.ino` using the real AVR
+  toolchain (avr-gcc/avr-libc) against the real Arduino core and Servo
   library sources — the identical bytes a real Arduino would run. If you
-  edit the sketch, rebuild with `build_hex.sh` before restarting the bridge
-  (its own header comment has the one-time toolchain setup).
+  edit the sketch, rebuild with `build_hex.sh`, then re-embed the new hex
+  into `index.html`'s `EMBEDDED_FIRMWARE_HEX` constant if you're using the
+  embedded path.
 - **The CPU: real (simulated).** `avr8js` executes genuine ATmega328p
   machine code, cycle by cycle — not a reimplementation of what the
   firmware "should" do.
-- **Serial: real.** FORMFIND's `A118,45,...\n` lines get injected byte by
-  byte at genuine 115200-baud timing into the simulated USART; the
-  firmware's own `Serial.read()` / `handleLine()` do the actual parsing.
+- **Serial: real.** Commanded angles get injected byte by byte at genuine
+  115200-baud timing into the simulated USART; the firmware's own
+  `Serial.read()` / `handleLine()` do the actual parsing.
 - **Servo motion: measured, not assumed.** The firmware's real `Servo`
   library bit-bangs each pin via a Timer1 interrupt exactly as it would on
-  hardware. The bridge script watches the simulated GPIO pins and measures
-  the actual pulse widths, decoding them back into 0–180° the way a real
-  servo's control circuitry would. A firmware bug in angle handling shows
-  up here exactly as it would on a real rig.
+  hardware. Both the embedded version and this script watch the simulated
+  GPIO pins and measure the actual pulse widths, decoding them back into
+  0–180° the way a real servo's control circuitry would. A firmware bug in
+  angle handling shows up here exactly as it would on a real rig — neither
+  path mirrors FORMFIND's on-screen state directly, both run the real code.
 - **The A0 sensor: a stand-in.** There's no real potentiometer to read, so
-  the script feeds a synthetic value into the ADC — by default a slow
-  0–1023 sweep over ~12 seconds, purely so `analogRead()` and the
-  "Sensor drives" loop-closing feature have something to show. Override
-  with `node avr8js_sim_bridge.js --sensor=750` for a fixed reading, or
-  `--sensor=off` to leave it silent. This is the one part of the setup
-  that isn't measuring anything real — everything else in the chain is.
+  a synthetic value gets fed into the ADC — a slow 0–1023 sweep over ~12
+  seconds, purely so `analogRead()` and the "Sensor drives" loop-closing
+  feature have something to show. This script's sweep can be overridden
+  (`--sensor=750` for a fixed reading, `--sensor=off` for silent); the
+  embedded version always uses the default sweep. This is the one part of
+  the setup that isn't measuring anything real — everything else is.
+
+The `formfind_servo/` folder's fixed 8-servo firmware (`NUM_SERVOS`/
+`SERVO_PINS` in the `.ino`) is what both the embedded preview and this
+dashboard always mirror — independent of FORMFIND's "servo count" field,
+which only controls how many angles go out to real/external hardware.
 
 ## If you want to see the physical wiring layout too
 
-This script's dashboard shows abstract stick figures, not a rendered board.
-FORMFIND doesn't have an in-app view of the physical wiring anymore — if you
-want that, build the wiring yourself in a Wokwi project (paste
-`formfind_servo.ino` into a new Arduino Uno project at wokwi.com and wire up
-8 servos on pins 2-9) and just keep that tab open alongside this dashboard.
+Neither simulator renders a board — just abstract stick figures/arms.
+FORMFIND doesn't have an in-app view of the physical wiring either — if
+you want that, build the wiring yourself in a Wokwi project (paste
+`formfind_servo.ino` into a new Arduino Uno project at wokwi.com and wire
+up 8 servos on pins 2-9) and keep that tab open alongside whichever
+simulator you're using.
