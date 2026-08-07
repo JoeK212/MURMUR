@@ -173,6 +173,23 @@ sectionHeader('v1.11.1 — connect failure handling');
 check('WebSerial connect handler catches a failed module import instead of hanging on "Connecting..."', /ensureHwBridge\(\);\s*\n\s*await bridge\.connect\(\);[\s\S]{0,150}\} catch\(e\)\{/.test(src));
 check('Wokwi bridge connect handler catches a failed module import the same way', /ensureWokwiWsBridge\(url\);\s*\n\s*await bridge\.connect\(\);[\s\S]{0,150}\} catch\(e\)\{/.test(src));
 
+/* ===================== v1.12.0 — avr8js simulator bridge ===================== */
+sectionHeader('v1.12.0 — avr8js simulator bridge');
+check('Physical Rig panel label mentions both WS bridge backends (Wokwi relay + avr8js)', /avr8js_sim_bridge\.js/.test(src) && /wokwi_ws_bridge\.py/.test(src));
+check('Help modal also documents both bridge backends, not just Wokwi', /AVR8JS_SETUP\.md/.test(src));
+const SIM_BRIDGE_FILE = path.join(__dirname, 'formfind_servo', 'avr8js_sim_bridge.js');
+const simBridgeSrc = fs.existsSync(SIM_BRIDGE_FILE) ? fs.readFileSync(SIM_BRIDGE_FILE, 'utf8') : null;
+check('formfind_servo/avr8js_sim_bridge.js exists', !!simBridgeSrc);
+check('formfind_servo/formfind_servo.hex (compiled firmware) exists', fs.existsSync(path.join(__dirname, 'formfind_servo', 'formfind_servo.hex')));
+check('formfind_servo/build_hex.sh exists', fs.existsSync(path.join(__dirname, 'formfind_servo', 'build_hex.sh')));
+check('formfind_servo/AVR8JS_SETUP.md exists', fs.existsSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md')));
+if (simBridgeSrc) {
+  check('sim bridge defaults to the same WS port (8765) FORMFIND\'s UI defaults to', /argValue\('port', '8765'\)/.test(simBridgeSrc));
+  check('sim bridge paces execution to real time rather than running flat-out (avoids flooding the ~20Hz sensor stream)', /startWall/.test(simBridgeSrc) && /MAX_CATCHUP_SEC/.test(simBridgeSrc));
+  check('sim bridge decodes servo angles from measured PWM pulse widths, not from the commanded value directly', /riseCycle/.test(simBridgeSrc) && /MIN_PULSE_US/.test(simBridgeSrc));
+  check('sim bridge speaks the onLineTransmit / message line protocol matching hardware-bridge.js', /onLineTransmit/.test(simBridgeSrc) && /ws\.on\('message'/.test(simBridgeSrc));
+}
+
 /* ===================== Summary ===================== */
 console.log(`\n${BOLD}${'-'.repeat(40)}${RESET}`);
 console.log(`${GREEN}${pass} passed${RESET}, ${fail ? RED : DIM}${fail} failed${RESET}`);

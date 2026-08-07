@@ -156,7 +156,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.11.1'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.12.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -214,7 +214,7 @@ function showHelp(){
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
       <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of posts with arms swinging spheres, in elevation like the real piece, with a side/angled view toggle. It's driven by the same angle calculation the real serial connection uses, and even slew-rate-limits the motion to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Wokwi embed:</strong> paste a <a href="https://wokwi.com" target="_blank" rel="noopener">wokwi.com</a> project link to see the actual simulated board and servo parts, as wired in that project — a much richer visual reference than the 3D preview above. This is a static reference embed, not live-linked to what's on screen. For a genuinely live link — servos in a real Wokwi simulation moving with what's playing — use "Connect via Wokwi Bridge" instead, which talks to a small local script (<code>wokwi_ws_bridge.py</code>, see WOKWI_SETUP.md) over a plain WebSocket. No WebSerial, no virtual COM port drivers.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Wokwi embed:</strong> paste a <a href="https://wokwi.com" target="_blank" rel="noopener">wokwi.com</a> project link to see the actual simulated board and servo parts, as wired in that project — a much richer visual reference than the 3D preview above. This is a static reference embed, not live-linked to what's on screen. For a genuinely live link — servos moving with what's playing, no real hardware needed — use "Connect via Wokwi Bridge" instead. Two small local scripts speak the same WebSocket protocol on the same default port: <code>wokwi_ws_bridge.py</code> relays to a real Wokwi cloud simulation (see WOKWI_SETUP.md), or <code>avr8js_sim_bridge.js</code> runs the real firmware itself locally with no Wokwi account or VS Code needed (see AVR8JS_SETUP.md) — run whichever one, not both. No WebSerial, no virtual COM port drivers either way.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -1205,7 +1205,7 @@ function renderHome(){
         <span class="sliderVal" id="hwStatus" style="width:auto; text-align:left;">Not connected.</span>
       </div>
       <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
-        <div class="label">Or connect to a Wokwi simulation via wokwi_ws_bridge.py — no WebSerial, no virtual COM port, works in any browser. See WOKWI_SETUP.md.</div>
+        <div class="label">Or connect over a plain WebSocket — no WebSerial, no virtual COM port, works in any browser. Two backends speak this same protocol on the same default port: <code>wokwi_ws_bridge.py</code> relays to a real Wokwi simulation (see WOKWI_SETUP.md), or <code>avr8js_sim_bridge.js</code> runs the real firmware itself locally, no Wokwi account needed (see AVR8JS_SETUP.md). Run one or the other, not both.</div>
         <div class="row" style="margin-top:0;">
           <input id="wokwiWsUrlInput" type="text" value="ws://localhost:8765" style="flex:1; min-width:140px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
           <button class="btn secondary" id="wokwiWsConnectBtn">Connect via Wokwi Bridge</button>
