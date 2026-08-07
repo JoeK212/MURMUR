@@ -161,11 +161,12 @@ export function createHardwareBridge({
   -----------------------
   Same shape as createHardwareBridge above (connect/disconnect/connected,
   same getAngles/onSensorReading/onStatusChange callbacks) but talks over a
-  plain WebSocket instead of WebSerial. Built for connecting to a local relay
-  script (see arduino/formfind_servo/wokwi_ws_bridge.py) that forwards to a
-  Wokwi simulation's RFC2217 serial port — no virtual COM port driver, no
-  OS-level driver signing to fight. Works for any WebSocket-speaking target
-  that understands the same line protocol, not just Wokwi specifically.
+  plain WebSocket instead of WebSerial. Built for connecting to a local
+  bridge script that runs or relays to the actual firmware — see
+  formfind_servo/avr8js_sim_bridge.js (runs the real firmware locally via
+  avr8js) — no virtual COM port driver, no OS-level driver signing to
+  fight. Works for any WebSocket-speaking target that understands the same
+  line protocol, not tied to any one backend.
 
   USAGE
   -----

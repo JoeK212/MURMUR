@@ -175,7 +175,7 @@ check('Wokwi bridge connect handler catches a failed module import the same way'
 
 /* ===================== v1.12.0 — avr8js simulator bridge ===================== */
 sectionHeader('v1.12.0 — avr8js simulator bridge');
-check('Physical Rig panel label mentions both WS bridge backends (Wokwi relay + avr8js)', /avr8js_sim_bridge\.js/.test(src) && /wokwi_ws_bridge\.py/.test(src));
+check('Physical Rig panel label documents the simulator bridge backend', /avr8js_sim_bridge\.js/.test(src));
 check('Help modal also documents both bridge backends, not just Wokwi', /AVR8JS_SETUP\.md/.test(src));
 const SIM_BRIDGE_FILE = path.join(__dirname, 'formfind_servo', 'avr8js_sim_bridge.js');
 const simBridgeSrc = fs.existsSync(SIM_BRIDGE_FILE) ? fs.readFileSync(SIM_BRIDGE_FILE, 'utf8') : null;
@@ -189,6 +189,31 @@ if (simBridgeSrc) {
   check('sim bridge decodes servo angles from measured PWM pulse widths, not from the commanded value directly', /riseCycle/.test(simBridgeSrc) && /MIN_PULSE_US/.test(simBridgeSrc));
   check('sim bridge speaks the onLineTransmit / message line protocol matching hardware-bridge.js', /onLineTransmit/.test(simBridgeSrc) && /ws\.on\('message'/.test(simBridgeSrc));
 }
+
+/* ===================== v1.13.0 — avr8js sim bridge live dashboard ===================== */
+sectionHeader('v1.13.0 — avr8js sim bridge live dashboard');
+check('Physical Rig panel label mentions the live dashboard URL', /localhost:8766/.test(src));
+check('Help modal also mentions the live dashboard', /localhost:8766/.test(src));
+if (simBridgeSrc) {
+  check('sim bridge serves an HTTP dashboard server (not terminal-only)', /require\('http'\)/.test(simBridgeSrc) && /httpServer\.listen/.test(simBridgeSrc));
+  check('dashboard is broadcast-only: same currentAngles array as the terminal readout, not a separate computation', /angles: currentAngles/.test(simBridgeSrc));
+  check('dashboard supports --dashboard-port and --no-dashboard flags', /dashboard-port/.test(simBridgeSrc) && /no-dashboard/.test(simBridgeSrc));
+  check('dashboard client auto-reconnects if the bridge restarts', /setTimeout\(connect, 1500\)/.test(simBridgeSrc));
+}
+
+/* ===================== v1.14.0 — Wokwi live-relay removal ===================== */
+sectionHeader('v1.14.0 — Wokwi live-relay removal');
+check('wokwi_bridge.py (dead WebSerial/com0com relay) removed', !fs.existsSync(path.join(__dirname, 'formfind_servo', 'wokwi_bridge.py')));
+check('wokwi_ws_bridge.py (redundant Wokwi WebSocket relay) removed', !fs.existsSync(path.join(__dirname, 'formfind_servo', 'wokwi_ws_bridge.py')));
+check('no leftover "Wokwi Bridge" / wokwi_ws_bridge.py references in index.html', !/wokwi_ws_bridge\.py/.test(src) && !/Wokwi Bridge/.test(src));
+check('connect button renamed to reflect it\'s exclusively the simulator bridge now', /Connect via Simulator Bridge/.test(src));
+check('WOKWI_SETUP.md no longer documents the deleted relay scripts', (() => {
+  const p = path.join(__dirname, 'formfind_servo', 'WOKWI_SETUP.md');
+  if (!fs.existsSync(p)) return false;
+  const t = fs.readFileSync(p, 'utf8');
+  return !/wokwi_ws_bridge\.py/.test(t) && !/wokwi_bridge\.py/.test(t);
+})());
+check('static Wokwi embed itself (iframe, v1.10.0) is kept, not removed', /iframe\.src = `https:\/\/wokwi\.com\/projects\/\$\{m\[1\]\}`/.test(src));
 
 /* ===================== Summary ===================== */
 console.log(`\n${BOLD}${'-'.repeat(40)}${RESET}`);
