@@ -1,0 +1,14 @@
+{
+  "name": "formfind-avr8js-sim-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runs formfind_servo.ino's real compiled firmware in avr8js and bridges it to FORMFIND over WebSocket — no Wokwi account, no virtual COM port.",
+  "main": "avr8js_sim_bridge.js",
+  "scripts": {
+    "start": "node avr8js_sim_bridge.js"
+  },
+  "dependencies": {
+    "avr8js": "^0.21.0",
+    "ws": "^8.18.0"
+  }
+}
