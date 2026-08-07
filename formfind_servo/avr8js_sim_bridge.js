@@ -323,7 +323,9 @@ function buildDashboardHtml(numServos) {
   .disconnectedNote{margin-top:22px; font-size:12px; color:var(--ink-soft); text-align:center; max-width:420px; line-height:1.5;}
   /* Idle secondary motion — decorative only, driven by elapsed time (CSS animation-delay gives
      each figure a phase offset for a wave effect), not by any servo data. The .arm group's
-     transform (set from JS in setAngle) is the only piece of this tied to real angle data. */
+     transform (set from JS in setAngle) is the only piece of this tied to real angle data.
+     When FORMFIND isn't connected, .rig gets a "asleep" class that slows/shrinks this motion —
+     that part IS real data (formfindConnected from the bridge), not decoration. */
   @keyframes idleBob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4px); } }
   @keyframes legSwingL { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(6deg); } }
   @keyframes legSwingR { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(-6deg); } }
@@ -332,11 +334,20 @@ function buildDashboardHtml(numServos) {
   .legL{ animation: legSwingL 1.8s ease-in-out infinite; }
   .legR{ animation: legSwingR 1.8s ease-in-out infinite; }
   .restArm{ animation: restArmSway 2.6s ease-in-out infinite; }
+  .rig.asleep .figureSvg{ animation-duration: 3.4s; }
+  .rig.asleep .legL, .rig.asleep .legR{ animation-duration: 3.4s; }
+  .rig.asleep .restArm{ animation-duration: 4.6s; }
+  .rig.asleep .figureSvg{ opacity: 0.72; }
+  .trailArm{ transition: transform 60ms linear; pointer-events: none; }
+  .hand.spark{ animation: sparkFlash 0.4s ease-out; }
+  @keyframes sparkFlash { 0%{ r: 4.2; filter: drop-shadow(0 0 0 var(--accent-deep)); } 30%{ r: 8; filter: drop-shadow(0 0 6px var(--accent-deep)); } 100%{ r: 4.2; filter: drop-shadow(0 0 0 var(--accent-deep)); } }
+  #bgPulse{ position:fixed; inset:0; pointer-events:none; z-index:-1; background:radial-gradient(ellipse at 50% 30%, var(--accent-deep) 0%, transparent 70%); opacity:0; transition:opacity 300ms linear; }
 </style>
 </head>
 <body>
+  <div id="bgPulse"></div>
   <h1>FORMFIND — avr8js live rig</h1>
-  <p class="sub">Every figure below is a popsicle-stick person whose arm is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock. (The idle bob/leg-sway is just decoration to keep them from looking frozen — only the one swinging arm per figure is actual data.)</p>
+  <p class="sub">Every figure below is a popsicle-stick person whose arm is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock. (The idle bob/leg-sway is just decoration to keep them from looking frozen; the background pulse tracks the real A0 sensor reading, and figures visibly perk up once FORMFIND actually connects — the swinging arm, the background pulse, and the perk-up are the three things here that are real data.)</p>
   <div class="statusRow">
     <div class="stat"><span class="dot" id="dashDot"></span> dashboard <b id="dashState">connecting…</b></div>
     <div class="stat"><span class="dot" id="ffDot"></span> FORMFIND <b id="ffState">not connected</b></div>
@@ -352,17 +363,61 @@ function buildDashboardHtml(numServos) {
   const rig = document.getElementById('rig');
   const arms = [];
   const labels = [];
-  const STICK = '#E3B77A'; // popsicle-wood tone, matches the Three.js preview's stickMat
+  const heads = [];
+  const hands = [];
+  const trailLines = []; // [figureIndex] -> array of 3 ghost <line> elements
+  const trailAngles = []; // [figureIndex] -> array of 3 lagged angle floats
+  const TRAIL_LAG = [0.30, 0.16, 0.09];
+  const TRAIL_OPACITY = [0.35, 0.20, 0.10];
+  const svgns = 'http://www.w3.org/2000/svg';
+
+  function pseudoRandom(seed){ // deterministic per-index "randomness" — same figures every reload, not reshuffled noise
+    const x = Math.sin(seed * 12.9898) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  // Wood-grain pattern, shared by every figure's sticks — a hidden shared <svg> holding one
+  // <defs>/<pattern>, referenced by id from each figure's own separate <svg> via fill="url(#...)"
+  const defsSvg = document.createElementNS(svgns, 'svg');
+  defsSvg.setAttribute('width', '0'); defsSvg.setAttribute('height', '0'); defsSvg.style.position = 'absolute';
+  const defs = document.createElementNS(svgns, 'defs');
+  const pattern = document.createElementNS(svgns, 'pattern');
+  pattern.setAttribute('id', 'woodGrain'); pattern.setAttribute('width', '20'); pattern.setAttribute('height', '20'); pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+  const bg = document.createElementNS(svgns, 'rect');
+  bg.setAttribute('width', '20'); bg.setAttribute('height', '20'); bg.setAttribute('fill', '#E3B77A');
+  pattern.appendChild(bg);
+  for (let g = 0; g < 3; g++) {
+    const grain = document.createElementNS(svgns, 'path');
+    const y = 4 + g * 6;
+    grain.setAttribute('d', 'M0 ' + y + ' Q5 ' + (y - 2) + ' 10 ' + y + ' T20 ' + y);
+    grain.setAttribute('stroke', g % 2 === 0 ? 'rgba(180,130,70,0.4)' : 'rgba(255,224,180,0.35)');
+    grain.setAttribute('stroke-width', '1'); grain.setAttribute('fill', 'none');
+    pattern.appendChild(grain);
+  }
+  defs.appendChild(pattern);
+  defsSvg.appendChild(defs);
+  rig.appendChild(defsSvg);
 
   for (let i = 0; i < NUM; i++) {
     const wrap = document.createElement('div');
     wrap.className = 'servo';
-    const svgns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgns, 'svg');
     svg.setAttribute('width', '64'); svg.setAttribute('height', '104'); svg.setAttribute('viewBox', '0 0 70 116');
     svg.setAttribute('class', 'figureSvg');
     const delay = (i * 0.12).toFixed(2) + 's';
     svg.style.animationDelay = delay;
+
+    const rnd = pseudoRandom(i * 7.3); // 0..1, fixed per figure index — a little individuality, not per-frame noise
+    const headR = (8 + rnd * 4).toFixed(1);
+    const hueRotate = Math.round((rnd - 0.5) * 26); // small per-figure hue shift on the wood tone via CSS filter
+    svg.style.filter = 'hue-rotate(' + hueRotate + 'deg)';
+    const STICK = 'url(#woodGrain)';
+
+    // ground shadow — grounds the figure, purely cosmetic
+    const shadow = document.createElementNS(svgns, 'ellipse');
+    shadow.setAttribute('cx', '35'); shadow.setAttribute('cy', '101'); shadow.setAttribute('rx', '13'); shadow.setAttribute('ry', '3.5');
+    shadow.setAttribute('fill', 'rgba(0,0,0,0.4)');
+    svg.appendChild(shadow);
 
     // legs — hip at (35,66) down to feet at y=100, idle-swaying (decorative, phase-offset per figure)
     const legL = document.createElementNS(svgns, 'line');
@@ -382,11 +437,25 @@ function buildDashboardHtml(numServos) {
     torso.setAttribute('stroke', STICK); torso.setAttribute('stroke-width', '5'); torso.setAttribute('stroke-linecap', 'round');
     svg.appendChild(torso);
 
-    // head (static)
+    // trailing ghost arms — a fading comet trail behind the real arm's recent motion (drawn before the real arm/head so it renders underneath)
+    const figureTrails = [];
+    for (let g = 0; g < TRAIL_LAG.length; g++) {
+      const gArm = document.createElementNS(svgns, 'line');
+      gArm.setAttribute('x1', '35'); gArm.setAttribute('y1', '34'); gArm.setAttribute('x2', '35'); gArm.setAttribute('y2', '63');
+      gArm.setAttribute('stroke', '#E3B77A'); gArm.setAttribute('stroke-width', '4'); gArm.setAttribute('stroke-linecap', 'round');
+      gArm.setAttribute('class', 'trailArm'); gArm.style.transformOrigin = '35px 34px'; gArm.style.opacity = TRAIL_OPACITY[g];
+      svg.appendChild(gArm);
+      figureTrails.push(gArm);
+    }
+    trailLines.push(figureTrails);
+    trailAngles.push(new Float32Array(TRAIL_LAG.length).fill(90));
+
+    // head — glow (filter) intensity is set per-frame from this figure's own real angle deviation
     const head = document.createElementNS(svgns, 'circle');
-    head.setAttribute('cx', '35'); head.setAttribute('cy', '18'); head.setAttribute('r', '10');
+    head.setAttribute('cx', '35'); head.setAttribute('cy', '18'); head.setAttribute('r', headR);
     head.setAttribute('fill', 'var(--accent)');
     svg.appendChild(head);
+    heads.push(head);
 
     // resting arm — idle-swaying (decorative), a second arm so it reads as a figure, not just one stick with an arm
     const restArm = document.createElementNS(svgns, 'line');
@@ -407,8 +476,10 @@ function buildDashboardHtml(numServos) {
     const hand = document.createElementNS(svgns, 'circle');
     hand.setAttribute('cx', '35'); hand.setAttribute('cy', '63'); hand.setAttribute('r', '4.2');
     hand.setAttribute('fill', 'var(--accent-deep)');
+    hand.setAttribute('class', 'hand');
     armGroup.appendChild(hand);
     svg.appendChild(armGroup);
+    hands.push(hand);
 
     wrap.appendChild(svg);
     const angleLabel = document.createElement('div');
@@ -423,11 +494,34 @@ function buildDashboardHtml(numServos) {
     labels.push(angleLabel);
   }
 
+  const SPARK_THRESHOLD = 3; // degrees from 0/180 that counts as "hit the extreme"
+  const wasNearExtreme = new Array(NUM).fill(false);
+
   function setAngle(i, deg) {
     // 0-180 servo angle -> arm rotation, 90deg = hanging straight down (neutral boot position)
     const rotation = deg - 90;
     arms[i].style.transform = 'rotate(' + rotation + 'deg)';
     labels[i].textContent = deg + '°';
+
+    // Trailing ghost arms — first-order lag toward the real angle, each slower than the last
+    const trail = trailAngles[i];
+    for (let g = 0; g < trail.length; g++) {
+      trail[g] += (deg - trail[g]) * TRAIL_LAG[g];
+      trailLines[i][g].style.transform = 'rotate(' + (trail[g] - 90) + 'deg)';
+    }
+
+    // Head/hand glow — intensity from this figure's own angle deviation from neutral (real data)
+    const deviation = Math.abs(deg - 90) / 90; // 0..1
+    heads[i].style.filter = deviation > 0.02 ? 'drop-shadow(0 0 ' + (deviation * 7).toFixed(1) + 'px var(--accent-deep))' : 'none';
+
+    // Milestone spark when a figure actually reaches a real extreme (0° or 180°)
+    const nearExtreme = deg < SPARK_THRESHOLD || deg > 180 - SPARK_THRESHOLD;
+    if (nearExtreme && !wasNearExtreme[i]) {
+      hands[i].classList.remove('spark');
+      void hands[i].offsetWidth; // restart the CSS animation
+      hands[i].classList.add('spark');
+    }
+    wasNearExtreme[i] = nearExtreme;
   }
 
   const dashDot = document.getElementById('dashDot');
@@ -437,6 +531,7 @@ function buildDashboardHtml(numServos) {
   const simTimeEl = document.getElementById('simTime');
   const sensorEl = document.getElementById('sensorVal');
   const note = document.getElementById('disconnectedNote');
+  const bgPulse = document.getElementById('bgPulse');
 
   function connect() {
     const ws = new WebSocket('ws://' + location.host);
@@ -449,8 +544,11 @@ function buildDashboardHtml(numServos) {
       if (Array.isArray(data.angles)) data.angles.forEach((a, i) => { if (arms[i]) setAngle(i, a); });
       simTimeEl.textContent = data.simTime.toFixed(1) + 's';
       sensorEl.textContent = data.sensor + ' / 1023';
-      ffDot.classList.toggle('live', !!data.formfindConnected);
-      ffState.textContent = data.formfindConnected ? 'connected' : 'not connected';
+      bgPulse.style.opacity = ((data.sensor / 1023) * 0.16).toFixed(3); // real A0 reading, not decorative
+      const connected = !!data.formfindConnected;
+      ffDot.classList.toggle('live', connected);
+      ffState.textContent = connected ? 'connected' : 'not connected';
+      rig.classList.toggle('asleep', !connected); // figures visibly perk up once FORMFIND actually connects
     };
     ws.onclose = () => {
       dashDot.classList.remove('live'); dashState.textContent = 'disconnected'; note.style.display = 'block';
