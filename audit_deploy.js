@@ -154,11 +154,6 @@ if(bridgeSrc){
   console.log(`  ${DIM}(hardware-bridge.js not found alongside this script — skipping its internal checks; index.html-side checks above still ran)${RESET}`);
 }
 
-/* ===================== v1.10.0 — Wokwi circuit embed ===================== */
-sectionHeader('v1.10.0 — Wokwi circuit embed');
-check('iframe src is built from an extracted numeric ID, never the raw pasted string', /iframe\.src = `https:\/\/wokwi\.com\/projects\/\$\{m\[1\]\}`/.test(src));
-check('ID extraction uses a numeric-only regex (rules out javascript:/data: URL injection)', /raw\.match\(\/\(\\d\{6,\}\)\//.test(src));
-
 /* ===================== v1.11.0 — WebSocket Wokwi bridge ===================== */
 sectionHeader('v1.11.0 — WebSocket Wokwi bridge');
 check('WebSocket connect option exists alongside WebSerial (Connect Arduino kept, not replaced)', /id="hwConnectBtn"/.test(src) && /id="wokwiWsConnectBtn"/.test(src));
@@ -176,7 +171,7 @@ check('Wokwi bridge connect handler catches a failed module import the same way'
 /* ===================== v1.12.0 — avr8js simulator bridge ===================== */
 sectionHeader('v1.12.0 — avr8js simulator bridge');
 check('Physical Rig panel label documents the simulator bridge backend', /avr8js_sim_bridge\.js/.test(src));
-check('Help modal also documents both bridge backends, not just Wokwi', /AVR8JS_SETUP\.md/.test(src));
+check('Help modal also documents the simulator bridge backend', /AVR8JS_SETUP\.md/.test(src));
 const SIM_BRIDGE_FILE = path.join(__dirname, 'formfind_servo', 'avr8js_sim_bridge.js');
 const simBridgeSrc = fs.existsSync(SIM_BRIDGE_FILE) ? fs.readFileSync(SIM_BRIDGE_FILE, 'utf8') : null;
 check('formfind_servo/avr8js_sim_bridge.js exists', !!simBridgeSrc);
@@ -207,13 +202,17 @@ check('wokwi_bridge.py (dead WebSerial/com0com relay) removed', !fs.existsSync(p
 check('wokwi_ws_bridge.py (redundant Wokwi WebSocket relay) removed', !fs.existsSync(path.join(__dirname, 'formfind_servo', 'wokwi_ws_bridge.py')));
 check('no leftover "Wokwi Bridge" / wokwi_ws_bridge.py references in index.html', !/wokwi_ws_bridge\.py/.test(src) && !/Wokwi Bridge/.test(src));
 check('connect button renamed to reflect it\'s exclusively the simulator bridge now', /Connect via Simulator Bridge/.test(src));
-check('WOKWI_SETUP.md no longer documents the deleted relay scripts', (() => {
-  const p = path.join(__dirname, 'formfind_servo', 'WOKWI_SETUP.md');
-  if (!fs.existsSync(p)) return false;
-  const t = fs.readFileSync(p, 'utf8');
-  return !/wokwi_ws_bridge\.py/.test(t) && !/wokwi_bridge\.py/.test(t);
-})());
-check('static Wokwi embed itself (iframe, v1.10.0) is kept, not removed', /iframe\.src = `https:\/\/wokwi\.com\/projects\/\$\{m\[1\]\}`/.test(src));
+
+/* ===================== v1.15.0 — stick-figure rig + Wokwi embed removal ===================== */
+sectionHeader('v1.15.0 — stick-figure rig + Wokwi embed removal');
+check('static Wokwi iframe embed removed (was v1.10.0, superseded by v1.14.0\'s decision to cut it)', !/iframe\.src = `https:\/\/wokwi\.com\/projects\/\$\{m\[1\]\}`/.test(src) && !/wokwiEmbedWrap/.test(src) && !/wokwiUrlInput/.test(src));
+check('loadWokwiEmbed function and its button binding removed', !/function loadWokwiEmbed/.test(src) && !/wokwiLoadBtn/.test(src));
+check('formfind_servo/WOKWI_SETUP.md, diagram.json, wokwi.toml removed (only existed to support the deleted embed)', !fs.existsSync(path.join(__dirname, 'formfind_servo', 'WOKWI_SETUP.md')) && !fs.existsSync(path.join(__dirname, 'formfind_servo', 'diagram.json')) && !fs.existsSync(path.join(__dirname, 'formfind_servo', 'wokwi.toml')));
+check('3D "simulated rig" preview rebuilt as popsicle-stick figures, not posts/spheres', /HW_TORSO_LEN/.test(src) && /stickMat/.test(src) && !/pedestalGeo/.test(src));
+check('checkbox label describes the stick-figure visual', /popsicle-stick figures/.test(src));
+if (simBridgeSrc) {
+  check('avr8js live dashboard also rebuilt as popsicle-stick figures', /popsicle-stick person/.test(simBridgeSrc) && /const STICK = /.test(simBridgeSrc));
+}
 
 /* ===================== Summary ===================== */
 console.log(`\n${BOLD}${'-'.repeat(40)}${RESET}`);

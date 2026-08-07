@@ -156,7 +156,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.14.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.15.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -212,9 +212,9 @@ function showHelp(){
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of posts with arms swinging spheres, in elevation like the real piece, with a side/angled view toggle. It's driven by the same angle calculation the real serial connection uses, and even slew-rate-limits the motion to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of popsicle-stick figures, each with one arm swinging on a servo, in elevation like the real piece, with a side/angled view toggle. It's driven by the same angle calculation the real serial connection uses, and even slew-rate-limits the motion to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Wokwi embed:</strong> paste a <a href="https://wokwi.com" target="_blank" rel="noopener">wokwi.com</a> project link to see the actual simulated board and servo parts, as wired in that project — a much richer visual reference than the 3D preview above. This is a static reference embed, not live-linked to what's on screen. For a genuinely live link — servos moving with what's playing, no real hardware needed — use "Connect via Simulator Bridge" instead: <code>avr8js_sim_bridge.js</code> runs FORMFIND's real firmware locally over a plain WebSocket (no WebSerial, no virtual COM port, no Wokwi account) and opens its own live browser dashboard at <code>http://localhost:8766</code> to watch the arms move — see AVR8JS_SETUP.md.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — popsicle-stick figures, each with one arm swinging on a servo, driven by FORMFIND's own on-screen state with no hardware or bridge needed. For a live preview driven by the actual servo firmware instead — no real hardware needed there either — use "Connect via Simulator Bridge": <code>avr8js_sim_bridge.js</code> runs FORMFIND's real firmware locally over a plain WebSocket (no WebSerial, no virtual COM port, no Wokwi account) and opens its own live browser dashboard at <code>http://localhost:8766</code> to watch it move — see AVR8JS_SETUP.md.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -418,6 +418,11 @@ const HW_SERVO_SLEW_DEG_PER_SEC = 300; // ~a typical standard hobby servo's real
 
 let hwSim = null; // { THREE, scene, camera, renderer, container, armPivots, count, currentAngles, totalWidth, viewMode }
 
+// Popsicle-stick-figure rig: each servo drives one figure's arm, swinging it like a wave.
+// Flat "stick" geometry (thin boxes, not round cylinders) for the popsicle-stick look; heads and
+// hand-tips reuse the field's own sphere color as a small callback to the main sphere grid.
+const HW_LEG_LEN = 0.42, HW_ARM_LEN = 0.46, HW_TORSO_LEN = 0.6, HW_HIP_Y = 0.45;
+
 function ensureHwSimScene(){
   if(!three || !three.THREE) return false; // main engine not loaded yet
   const container = document.getElementById('hwSimViewport');
@@ -437,8 +442,8 @@ function ensureHwSimScene(){
   const n = hardwareEngine.servoCount;
   const spacing = 1.0;
   const totalWidth = (n - 1) * spacing;
-  const requiredHeight = 2.3; // pedestal (1.0) + arm/sphere reach at full extension (~1.9) + margin
-  const requiredWidth = totalWidth + 1.4;
+  const requiredHeight = 1.9; // feet(0) to head-top(~1.3) with margin for the waving arm's swing
+  const requiredWidth = totalWidth + 1.6; // room for arms swung fully horizontal on the end figures
   const aspect = w / h;
   let camHeight = requiredHeight;
   let camWidth = camHeight * aspect;
@@ -455,31 +460,52 @@ function ensureHwSimScene(){
   renderer.setSize(w, h);
   container.appendChild(renderer.domElement);
 
-  const pedestalGeo = new THREE.CylinderGeometry(0.05, 0.06, 1.0, 8);
-  const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x23262c, metalness: 0.3, roughness: 0.7 });
-  const armGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6);
-  armGeo.translate(0, 0.45, 0); // pivot at the base end, not the center
-  const armMat = new THREE.MeshStandardMaterial({ color: 0x8a8f98, metalness: 0.6, roughness: 0.4 });
-  const sphereGeo = new THREE.SphereGeometry(0.14, 12, 10);
-  const sphereMat = new THREE.MeshStandardMaterial({ color: BASE_SPHERE_COLOR, metalness: 0.85, roughness: 0.28 });
+  const stickMat = new THREE.MeshStandardMaterial({ color: 0xE3B77A, metalness: 0.05, roughness: 0.85 }); // popsicle-wood tone
+  const accentMat = new THREE.MeshStandardMaterial({ color: BASE_SPHERE_COLOR, metalness: 0.85, roughness: 0.28 }); // heads/hands echo the main sphere field
+
+  const legGeo = new THREE.BoxGeometry(0.05, HW_LEG_LEN, 0.02);
+  legGeo.translate(0, -HW_LEG_LEN / 2, 0); // pivot at hip end, extends downward
+  const torsoGeo = new THREE.BoxGeometry(0.07, HW_TORSO_LEN, 0.03);
+  torsoGeo.translate(0, HW_TORSO_LEN / 2, 0); // pivot at hip end, extends upward
+  const armGeo = new THREE.BoxGeometry(0.045, HW_ARM_LEN, 0.02);
+  armGeo.translate(0, -HW_ARM_LEN / 2, 0); // pivot at shoulder end, hangs downward by default
+  const headGeo = new THREE.SphereGeometry(0.13, 14, 10);
+  const handGeo = new THREE.SphereGeometry(0.065, 10, 8);
 
   const armPivots = [];
   for(let i = 0; i < n; i++){
     const x = i * spacing - totalWidth / 2;
-    const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
-    pedestal.position.set(x, 0.5, 0);
-    scene.add(pedestal);
+    const figure = new THREE.Group();
+    figure.position.set(x, HW_HIP_Y, 0);
+    scene.add(figure);
 
-    const pivot = new THREE.Group();
-    pivot.position.set(x, 1.0, 0);
-    scene.add(pivot);
+    const legLeft = new THREE.Mesh(legGeo, stickMat);
+    legLeft.rotation.z = THREE.MathUtils.degToRad(16);
+    figure.add(legLeft);
+    const legRight = new THREE.Mesh(legGeo, stickMat);
+    legRight.rotation.z = THREE.MathUtils.degToRad(-16);
+    figure.add(legRight);
 
-    const arm = new THREE.Mesh(armGeo, armMat);
-    pivot.add(arm);
+    const torso = new THREE.Mesh(torsoGeo, stickMat);
+    figure.add(torso);
 
-    const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-    sphere.position.set(0, 0.9, 0);
-    pivot.add(sphere);
+    const head = new THREE.Mesh(headGeo, accentMat);
+    head.position.set(0, HW_TORSO_LEN + 0.16, 0);
+    figure.add(head);
+
+    const restingArm = new THREE.Mesh(armGeo, stickMat); // static, just for a two-armed silhouette
+    restingArm.position.set(0, HW_TORSO_LEN, 0);
+    restingArm.rotation.z = THREE.MathUtils.degToRad(-12);
+    figure.add(restingArm);
+
+    const pivot = new THREE.Group(); // the servo-driven arm
+    pivot.position.set(0, HW_TORSO_LEN, 0);
+    figure.add(pivot);
+    const drivenArm = new THREE.Mesh(armGeo, stickMat);
+    pivot.add(drivenArm);
+    const hand = new THREE.Mesh(handGeo, accentMat);
+    hand.position.set(0, -HW_ARM_LEN, 0);
+    pivot.add(hand);
 
     armPivots.push(pivot);
   }
@@ -1205,7 +1231,7 @@ function renderHome(){
         <span class="sliderVal" id="hwStatus" style="width:auto; text-align:left;">Not connected.</span>
       </div>
       <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
-        <div class="label">Or connect over a plain WebSocket — no WebSerial, no virtual COM port, works in any browser. <code>avr8js_sim_bridge.js</code> runs FORMFIND's real firmware locally (no Wokwi account needed) and opens its own live visual dashboard at <code>http://localhost:8766</code> — real servo arms moving from real firmware output. See AVR8JS_SETUP.md.</div>
+        <div class="label">Or connect over a plain WebSocket — no WebSerial, no virtual COM port, works in any browser. <code>avr8js_sim_bridge.js</code> runs FORMFIND's real firmware locally (no Wokwi account needed) and opens its own live visual dashboard at <code>http://localhost:8766</code> — stick figures waving from real firmware output. See AVR8JS_SETUP.md.</div>
         <div class="row" style="margin-top:0;">
           <input id="wokwiWsUrlInput" type="text" value="ws://localhost:8765" style="flex:1; min-width:140px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
           <button class="btn secondary" id="wokwiWsConnectBtn">Connect via Simulator Bridge</button>
@@ -1232,21 +1258,12 @@ function renderHome(){
       <div class="row" style="align-items:center;">
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); cursor:pointer;">
           <input type="checkbox" id="hwSimulateToggle">
-          Show simulated rig (3D preview, no hardware needed — includes realistic servo speed)
+          Show simulated rig (3D preview, popsicle-stick figures with one waving arm each — no hardware needed)
         </label>
       </div>
       <div class="row" id="hwSimWrap" style="display:none; margin-top:4px; flex-direction:column;">
         <div id="hwSimViewport" style="width:100%; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);"></div>
         <button class="btn ghost" id="hwSimViewBtn" style="align-self:flex-start; margin-top:6px;">Angled view</button>
-      </div>
-
-      <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
-        <div class="label">Or embed a Wokwi circuit — richer visual reference (real board/servo parts, as wired in your Wokwi project). This is a static reference view, not live-linked to what's happening above — Wokwi doesn't have a supported way to receive real-time data from another page.</div>
-        <div class="row" style="margin-top:0;">
-          <input id="wokwiUrlInput" type="text" placeholder="Paste a wokwi.com/projects/... link" style="flex:1; min-width:160px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
-          <button class="btn accent" id="wokwiLoadBtn">Load</button>
-        </div>
-        <div id="wokwiEmbedWrap" style="display:none; margin-top:10px; width:100%; height:480px; border:1px solid var(--line); border-radius:8px; overflow:hidden;"></div>
       </div>
     </div>
   `;
@@ -1308,10 +1325,6 @@ function renderHome(){
   document.getElementById('hwSimViewBtn').onclick = ()=>{
     setHwSimView(hwSim && hwSim.viewMode === 'angle' ? 'side' : 'angle');
   };
-  document.getElementById('wokwiLoadBtn').onclick = loadWokwiEmbed;
-  document.getElementById('wokwiUrlInput').addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter') loadWokwiEmbed();
-  });
   if(!('serial' in navigator)){
     document.getElementById('hwConnectBtn').disabled = true;
     document.getElementById('hwStatus').textContent = 'WebSerial needs Chrome or Edge on desktop.';
@@ -1463,23 +1476,6 @@ function updateStemsStatusText(){
   const loaded = STEM_KEYS.filter(k => audioEngine.stems[k]).map(k => STEM_LABELS[k]);
   const missing = STEM_KEYS.filter(k => !audioEngine.stems[k]).map(k => STEM_LABELS[k]);
   status.textContent = `Loaded: ${loaded.join(', ')}.` + (missing.length ? ` Not provided: ${missing.join(', ')}.` : '');
-}
-
-function loadWokwiEmbed(){
-  const raw = document.getElementById('wokwiUrlInput').value.trim();
-  const m = raw.match(/(\d{6,})/); // Wokwi project IDs are long numeric strings — pull one out of whatever URL shape was pasted
-  if(!m){
-    toast('Could not find a Wokwi project ID in that link');
-    return;
-  }
-  const wrap = document.getElementById('wokwiEmbedWrap');
-  wrap.innerHTML = '';
-  const iframe = document.createElement('iframe');
-  iframe.src = `https://wokwi.com/projects/${m[1]}`; // always built from the extracted numeric ID, never the raw pasted string, so this can't become an arbitrary/malicious iframe src
-  iframe.style.cssText = 'width:100%; height:100%; border:0;';
-  iframe.title = 'Wokwi circuit reference';
-  wrap.appendChild(iframe);
-  wrap.style.display = 'block';
 }
 
 function updateHardwareUi(){
