@@ -297,267 +297,328 @@ function buildDashboardHtml(numServos) {
     --accent:#7DD3FC; --accent-deep:#38BDF8;
   }
   *{box-sizing:border-box;}
+  html,body{ height:100%; }
   body{
-    margin:0; background:var(--paper); color:var(--ink);
+    margin:0; background:var(--paper-deep); color:var(--ink);
     font-family:-apple-system,'Space Grotesk','Inter',sans-serif;
-    min-height:100vh; display:flex; flex-direction:column; align-items:center;
-    padding:28px 16px 40px;
+    overflow:hidden;
   }
-  h1{font-size:15px; font-weight:600; letter-spacing:0.02em; margin:0 0 4px; color:var(--ink);}
-  .sub{font-size:12px; color:var(--ink-soft); margin:0 0 22px; text-align:center; max-width:560px; line-height:1.5;}
-  .statusRow{display:flex; gap:18px; align-items:center; margin-bottom:26px; flex-wrap:wrap; justify-content:center;}
-  .stat{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:7px;}
+  #c{ position:fixed; inset:0; display:block; z-index:0; }
+  .overlay{ position:relative; z-index:1; display:flex; flex-direction:column; align-items:center;
+    padding:22px 16px 0; pointer-events:none; }
+  h1{font-size:15px; font-weight:600; letter-spacing:0.02em; margin:0 0 4px; color:var(--ink); text-shadow:0 1px 8px rgba(0,0,0,0.6);}
+  .sub{font-size:12px; color:var(--ink-soft); margin:0 0 18px; text-align:center; max-width:560px; line-height:1.5; text-shadow:0 1px 8px rgba(0,0,0,0.6);}
+  .statusRow{display:flex; gap:18px; align-items:center; margin-bottom:10px; flex-wrap:wrap; justify-content:center; pointer-events:auto;}
+  .stat{background:rgba(19,21,25,0.72); backdrop-filter:blur(6px); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:7px;}
   .stat b{color:var(--ink); font-weight:600;}
   .dot{width:7px; height:7px; border-radius:50%; background:#555; flex:none;}
   .dot.live{background:var(--accent); box-shadow:0 0 8px var(--accent-deep);}
-  .rig{
-    display:flex; gap:14px; flex-wrap:wrap; justify-content:center;
-    background:var(--paper-deep); border:1px solid var(--line); border-radius:14px;
-    padding:32px 20px 20px;
-  }
-  .servo{display:flex; flex-direction:column; align-items:center; gap:8px; width:70px;}
-  .servo .angle{font-size:12px; color:var(--accent); font-variant-numeric:tabular-nums; min-height:16px;}
-  .servo .idx{font-size:10px; color:var(--ink-soft); letter-spacing:0.05em;}
-  svg{overflow:visible;}
-  .arm{transition:transform 60ms linear;}
-  .disconnectedNote{margin-top:22px; font-size:12px; color:var(--ink-soft); text-align:center; max-width:420px; line-height:1.5;}
-  /* Idle secondary motion — decorative only, driven by elapsed time (CSS animation-delay gives
-     each figure a phase offset for a wave effect), not by any servo data. The .arm group's
-     transform (set from JS in setAngle) is the only piece of this tied to real angle data.
-     When FORMFIND isn't connected, .rig gets a "asleep" class that slows/shrinks this motion —
-     that part IS real data (formfindConnected from the bridge), not decoration. */
-  @keyframes idleBob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4px); } }
-  @keyframes legSwingL { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(6deg); } }
-  @keyframes legSwingR { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(-6deg); } }
-  @keyframes restArmSway { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(10deg); } }
-  .figureSvg{ animation: idleBob 1.8s ease-in-out infinite; }
-  .legL{ animation: legSwingL 1.8s ease-in-out infinite; }
-  .legR{ animation: legSwingR 1.8s ease-in-out infinite; }
-  .restArm{ animation: restArmSway 2.6s ease-in-out infinite; }
-  .rig.asleep .figureSvg{ animation-duration: 3.4s; }
-  .rig.asleep .legL, .rig.asleep .legR{ animation-duration: 3.4s; }
-  .rig.asleep .restArm{ animation-duration: 4.6s; }
-  .rig.asleep .figureSvg{ opacity: 0.72; }
-  .trailArm{ transition: transform 60ms linear; pointer-events: none; }
-  .hand.spark{ animation: sparkFlash 0.4s ease-out; }
-  @keyframes sparkFlash { 0%{ r: 4.2; filter: drop-shadow(0 0 0 var(--accent-deep)); } 30%{ r: 8; filter: drop-shadow(0 0 6px var(--accent-deep)); } 100%{ r: 4.2; filter: drop-shadow(0 0 0 var(--accent-deep)); } }
-  #bgPulse{ position:fixed; inset:0; pointer-events:none; z-index:-1; background:radial-gradient(ellipse at 50% 30%, var(--accent-deep) 0%, transparent 70%); opacity:0; transition:opacity 300ms linear; }
+  .disconnectedNote{margin-top:16px; font-size:12px; color:var(--ink-soft); text-align:center; max-width:420px; line-height:1.5; pointer-events:auto;
+    background:rgba(19,21,25,0.72); backdrop-filter:blur(6px); border:1px solid var(--line); border-radius:8px; padding:10px 14px;}
 </style>
 </head>
 <body>
-  <div id="bgPulse"></div>
-  <h1>FORMFIND — avr8js live rig</h1>
-  <p class="sub">Every figure below is a popsicle-stick person whose arm is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock. (The idle bob/leg-sway is just decoration to keep them from looking frozen; the background pulse tracks the real A0 sensor reading, and figures visibly perk up once FORMFIND actually connects — the swinging arm, the background pulse, and the perk-up are the three things here that are real data.)</p>
-  <div class="statusRow">
-    <div class="stat"><span class="dot" id="dashDot"></span> dashboard <b id="dashState">connecting…</b></div>
-    <div class="stat"><span class="dot" id="ffDot"></span> FORMFIND <b id="ffState">not connected</b></div>
-    <div class="stat">sim time <b id="simTime">0.0s</b></div>
-    <div class="stat">A0 sensor <b id="sensorVal">—</b></div>
+  <canvas id="c"></canvas>
+  <div class="overlay">
+    <h1>FORMFIND — avr8js live rig</h1>
+    <p class="sub">Each glowing emitter is one servo channel; particles burst from it in real time, driven by the real formfind_servo.ino firmware's real PWM output measured off the simulated pins — not FORMFIND's on-screen state, not a mock. Burst size/speed = how far and how fast that channel's real angle is moving right now. The core pulses with the real A0 sensor reading, and the whole field dims and slows the moment the bridge loses FORMFIND — the three real-data signals here are per-emitter motion, core pulse, and dim/wake.</p>
+    <div class="statusRow">
+      <div class="stat"><span class="dot" id="dashDot"></span> dashboard <b id="dashState">connecting…</b></div>
+      <div class="stat"><span class="dot" id="ffDot"></span> FORMFIND <b id="ffState">not connected</b></div>
+      <div class="stat">sim time <b id="simTime">0.0s</b></div>
+      <div class="stat">A0 sensor <b id="sensorVal">—</b></div>
+    </div>
+    <p class="disconnectedNote" id="disconnectedNote" style="display:none;">Lost the connection to avr8js_sim_bridge.js — make sure that terminal is still running, then reload this page.</p>
   </div>
-  <div class="rig" id="rig"></div>
-  <p class="disconnectedNote" id="disconnectedNote" style="display:none;">Lost the connection to avr8js_sim_bridge.js — make sure that terminal is still running, then reload this page.</p>
 
-<script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+var NUM = ${numServos};
+
+// ---------- renderer / scene / camera ----------
+var canvas = document.getElementById('c');
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x060708);
+scene.fog = new THREE.FogExp2(0x060708, 0.028);
+
+var camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 300);
+camera.position.set(0, 7, 25);
+camera.lookAt(0, 0, 0);
+
+var rig = new THREE.Group();
+scene.add(rig);
+
+var composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+var bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.3, 0.65, 0.12);
+composer.addPass(bloomPass);
+
+// ---------- background starfield (depth only, not data-driven) ----------
 (function(){
-  const NUM = ${numServos};
-  const rig = document.getElementById('rig');
-  const arms = [];
-  const labels = [];
-  const heads = [];
-  const hands = [];
-  const trailLines = []; // [figureIndex] -> array of 3 ghost <line> elements
-  const trailAngles = []; // [figureIndex] -> array of 3 lagged angle floats
-  const TRAIL_LAG = [0.30, 0.16, 0.09];
-  const TRAIL_OPACITY = [0.35, 0.20, 0.10];
-  const svgns = 'http://www.w3.org/2000/svg';
-
-  function pseudoRandom(seed){ // deterministic per-index "randomness" — same figures every reload, not reshuffled noise
-    const x = Math.sin(seed * 12.9898) * 43758.5453;
-    return x - Math.floor(x);
+  var STAR_COUNT = 500;
+  var starPos = new Float32Array(STAR_COUNT * 3);
+  for (var s = 0; s < STAR_COUNT; s++) {
+    var r = 40 + Math.random() * 60;
+    var theta = Math.random() * Math.PI * 2;
+    var phi = Math.acos((Math.random() * 2) - 1);
+    starPos[s * 3] = r * Math.sin(phi) * Math.cos(theta);
+    starPos[s * 3 + 1] = r * Math.cos(phi) * 0.5;
+    starPos[s * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
   }
-
-  // Wood-grain pattern, shared by every figure's sticks — a hidden shared <svg> holding one
-  // <defs>/<pattern>, referenced by id from each figure's own separate <svg> via fill="url(#...)"
-  const defsSvg = document.createElementNS(svgns, 'svg');
-  defsSvg.setAttribute('width', '0'); defsSvg.setAttribute('height', '0'); defsSvg.style.position = 'absolute';
-  const defs = document.createElementNS(svgns, 'defs');
-  const pattern = document.createElementNS(svgns, 'pattern');
-  pattern.setAttribute('id', 'woodGrain'); pattern.setAttribute('width', '20'); pattern.setAttribute('height', '20'); pattern.setAttribute('patternUnits', 'userSpaceOnUse');
-  const bg = document.createElementNS(svgns, 'rect');
-  bg.setAttribute('width', '20'); bg.setAttribute('height', '20'); bg.setAttribute('fill', '#E3B77A');
-  pattern.appendChild(bg);
-  for (let g = 0; g < 3; g++) {
-    const grain = document.createElementNS(svgns, 'path');
-    const y = 4 + g * 6;
-    grain.setAttribute('d', 'M0 ' + y + ' Q5 ' + (y - 2) + ' 10 ' + y + ' T20 ' + y);
-    grain.setAttribute('stroke', g % 2 === 0 ? 'rgba(180,130,70,0.4)' : 'rgba(255,224,180,0.35)');
-    grain.setAttribute('stroke-width', '1'); grain.setAttribute('fill', 'none');
-    pattern.appendChild(grain);
-  }
-  defs.appendChild(pattern);
-  defsSvg.appendChild(defs);
-  rig.appendChild(defsSvg);
-
-  for (let i = 0; i < NUM; i++) {
-    const wrap = document.createElement('div');
-    wrap.className = 'servo';
-    const svg = document.createElementNS(svgns, 'svg');
-    svg.setAttribute('width', '64'); svg.setAttribute('height', '104'); svg.setAttribute('viewBox', '0 0 70 116');
-    svg.setAttribute('class', 'figureSvg');
-    const delay = (i * 0.12).toFixed(2) + 's';
-    svg.style.animationDelay = delay;
-
-    const rnd = pseudoRandom(i * 7.3); // 0..1, fixed per figure index — a little individuality, not per-frame noise
-    const headR = (8 + rnd * 4).toFixed(1);
-    const hueRotate = Math.round((rnd - 0.5) * 26); // small per-figure hue shift on the wood tone via CSS filter
-    svg.style.filter = 'hue-rotate(' + hueRotate + 'deg)';
-    const STICK = 'url(#woodGrain)';
-
-    // ground shadow — grounds the figure, purely cosmetic
-    const shadow = document.createElementNS(svgns, 'ellipse');
-    shadow.setAttribute('cx', '35'); shadow.setAttribute('cy', '101'); shadow.setAttribute('rx', '13'); shadow.setAttribute('ry', '3.5');
-    shadow.setAttribute('fill', 'rgba(0,0,0,0.4)');
-    svg.appendChild(shadow);
-
-    // legs — hip at (35,66) down to feet at y=100, idle-swaying (decorative, phase-offset per figure)
-    const legL = document.createElementNS(svgns, 'line');
-    legL.setAttribute('x1', '35'); legL.setAttribute('y1', '66'); legL.setAttribute('x2', '25'); legL.setAttribute('y2', '100');
-    legL.setAttribute('stroke', STICK); legL.setAttribute('stroke-width', '4'); legL.setAttribute('stroke-linecap', 'round');
-    legL.setAttribute('class', 'legL'); legL.style.transformOrigin = '35px 66px'; legL.style.animationDelay = delay;
-    svg.appendChild(legL);
-    const legR = document.createElementNS(svgns, 'line');
-    legR.setAttribute('x1', '35'); legR.setAttribute('y1', '66'); legR.setAttribute('x2', '45'); legR.setAttribute('y2', '100');
-    legR.setAttribute('stroke', STICK); legR.setAttribute('stroke-width', '4'); legR.setAttribute('stroke-linecap', 'round');
-    legR.setAttribute('class', 'legR'); legR.style.transformOrigin = '35px 66px'; legR.style.animationDelay = delay;
-    svg.appendChild(legR);
-
-    // torso (static) — hip (35,66) up to shoulder (35,34)
-    const torso = document.createElementNS(svgns, 'line');
-    torso.setAttribute('x1', '35'); torso.setAttribute('y1', '66'); torso.setAttribute('x2', '35'); torso.setAttribute('y2', '34');
-    torso.setAttribute('stroke', STICK); torso.setAttribute('stroke-width', '5'); torso.setAttribute('stroke-linecap', 'round');
-    svg.appendChild(torso);
-
-    // trailing ghost arms — a fading comet trail behind the real arm's recent motion (drawn before the real arm/head so it renders underneath)
-    const figureTrails = [];
-    for (let g = 0; g < TRAIL_LAG.length; g++) {
-      const gArm = document.createElementNS(svgns, 'line');
-      gArm.setAttribute('x1', '35'); gArm.setAttribute('y1', '34'); gArm.setAttribute('x2', '35'); gArm.setAttribute('y2', '63');
-      gArm.setAttribute('stroke', '#E3B77A'); gArm.setAttribute('stroke-width', '4'); gArm.setAttribute('stroke-linecap', 'round');
-      gArm.setAttribute('class', 'trailArm'); gArm.style.transformOrigin = '35px 34px'; gArm.style.opacity = TRAIL_OPACITY[g];
-      svg.appendChild(gArm);
-      figureTrails.push(gArm);
-    }
-    trailLines.push(figureTrails);
-    trailAngles.push(new Float32Array(TRAIL_LAG.length).fill(90));
-
-    // head — glow (filter) intensity is set per-frame from this figure's own real angle deviation
-    const head = document.createElementNS(svgns, 'circle');
-    head.setAttribute('cx', '35'); head.setAttribute('cy', '18'); head.setAttribute('r', headR);
-    head.setAttribute('fill', 'var(--accent)');
-    svg.appendChild(head);
-    heads.push(head);
-
-    // resting arm — idle-swaying (decorative), a second arm so it reads as a figure, not just one stick with an arm
-    const restArm = document.createElementNS(svgns, 'line');
-    restArm.setAttribute('x1', '35'); restArm.setAttribute('y1', '34'); restArm.setAttribute('x2', '43'); restArm.setAttribute('y2', '60');
-    restArm.setAttribute('stroke', STICK); restArm.setAttribute('stroke-width', '4'); restArm.setAttribute('stroke-linecap', 'round');
-    restArm.setAttribute('class', 'restArm'); restArm.style.transformOrigin = '35px 34px'; restArm.style.animationDelay = (i * 0.18).toFixed(2) + 's';
-    svg.appendChild(restArm);
-
-    // driven arm — pivots at the shoulder (35,34); hangs straight down by default (0-180 servo -> ±90° swing)
-    const armGroup = document.createElementNS(svgns, 'g');
-    armGroup.setAttribute('class', 'arm');
-    armGroup.style.transformOrigin = '35px 34px';
-    const armLine = document.createElementNS(svgns, 'line');
-    armLine.setAttribute('x1', '35'); armLine.setAttribute('y1', '34');
-    armLine.setAttribute('x2', '35'); armLine.setAttribute('y2', '63');
-    armLine.setAttribute('stroke', STICK); armLine.setAttribute('stroke-width', '4'); armLine.setAttribute('stroke-linecap', 'round');
-    armGroup.appendChild(armLine);
-    const hand = document.createElementNS(svgns, 'circle');
-    hand.setAttribute('cx', '35'); hand.setAttribute('cy', '63'); hand.setAttribute('r', '4.2');
-    hand.setAttribute('fill', 'var(--accent-deep)');
-    hand.setAttribute('class', 'hand');
-    armGroup.appendChild(hand);
-    svg.appendChild(armGroup);
-    hands.push(hand);
-
-    wrap.appendChild(svg);
-    const angleLabel = document.createElement('div');
-    angleLabel.className = 'angle'; angleLabel.textContent = '—';
-    wrap.appendChild(angleLabel);
-    const idxLabel = document.createElement('div');
-    idxLabel.className = 'idx'; idxLabel.textContent = 'pin ' + (i + 2);
-    wrap.appendChild(idxLabel);
-
-    rig.appendChild(wrap);
-    arms.push(armGroup);
-    labels.push(angleLabel);
-  }
-
-  const SPARK_THRESHOLD = 3; // degrees from 0/180 that counts as "hit the extreme"
-  const wasNearExtreme = new Array(NUM).fill(false);
-
-  function setAngle(i, deg) {
-    // 0-180 servo angle -> arm rotation, 90deg = hanging straight down (neutral boot position)
-    const rotation = deg - 90;
-    arms[i].style.transform = 'rotate(' + rotation + 'deg)';
-    labels[i].textContent = deg + '°';
-
-    // Trailing ghost arms — first-order lag toward the real angle, each slower than the last
-    const trail = trailAngles[i];
-    for (let g = 0; g < trail.length; g++) {
-      trail[g] += (deg - trail[g]) * TRAIL_LAG[g];
-      trailLines[i][g].style.transform = 'rotate(' + (trail[g] - 90) + 'deg)';
-    }
-
-    // Head/hand glow — intensity from this figure's own angle deviation from neutral (real data)
-    const deviation = Math.abs(deg - 90) / 90; // 0..1
-    heads[i].style.filter = deviation > 0.02 ? 'drop-shadow(0 0 ' + (deviation * 7).toFixed(1) + 'px var(--accent-deep))' : 'none';
-
-    // Milestone spark when a figure actually reaches a real extreme (0° or 180°)
-    const nearExtreme = deg < SPARK_THRESHOLD || deg > 180 - SPARK_THRESHOLD;
-    if (nearExtreme && !wasNearExtreme[i]) {
-      hands[i].classList.remove('spark');
-      void hands[i].offsetWidth; // restart the CSS animation
-      hands[i].classList.add('spark');
-    }
-    wasNearExtreme[i] = nearExtreme;
-  }
-
-  const dashDot = document.getElementById('dashDot');
-  const dashState = document.getElementById('dashState');
-  const ffDot = document.getElementById('ffDot');
-  const ffState = document.getElementById('ffState');
-  const simTimeEl = document.getElementById('simTime');
-  const sensorEl = document.getElementById('sensorVal');
-  const note = document.getElementById('disconnectedNote');
-  const bgPulse = document.getElementById('bgPulse');
-
-  function connect() {
-    const ws = new WebSocket('ws://' + location.host);
-    ws.onopen = () => {
-      dashDot.classList.add('live'); dashState.textContent = 'live'; note.style.display = 'none';
-    };
-    ws.onmessage = (evt) => {
-      let data;
-      try { data = JSON.parse(evt.data); } catch (e) { return; }
-      if (Array.isArray(data.angles)) data.angles.forEach((a, i) => { if (arms[i]) setAngle(i, a); });
-      simTimeEl.textContent = data.simTime.toFixed(1) + 's';
-      sensorEl.textContent = data.sensor + ' / 1023';
-      bgPulse.style.opacity = ((data.sensor / 1023) * 0.16).toFixed(3); // real A0 reading, not decorative
-      const connected = !!data.formfindConnected;
-      ffDot.classList.toggle('live', connected);
-      ffState.textContent = connected ? 'connected' : 'not connected';
-      rig.classList.toggle('asleep', !connected); // figures visibly perk up once FORMFIND actually connects
-    };
-    ws.onclose = () => {
-      dashDot.classList.remove('live'); dashState.textContent = 'disconnected'; note.style.display = 'block';
-      setTimeout(connect, 1500);
-    };
-    ws.onerror = () => ws.close();
-  }
-  connect();
+  var starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  var starMat = new THREE.PointsMaterial({ color: 0x23262C, size: 0.35, sizeAttenuation: true, transparent: true, opacity: 0.6 });
+  scene.add(new THREE.Points(starGeo, starMat));
 })();
+
+// ---------- core: pulses with the real A0 sensor reading ----------
+var coreGeo = new THREE.IcosahedronGeometry(2, 3);
+var coreMat = new THREE.MeshBasicMaterial({ color: 0x7DD3FC, wireframe: true, transparent: true, opacity: 0.55 });
+var core = new THREE.Mesh(coreGeo, coreMat);
+rig.add(core);
+var coreLight = new THREE.PointLight(0x38BDF8, 3, 45, 2);
+rig.add(coreLight);
+
+// ---------- per-servo emitters, arranged on a ring ----------
+var RING_RADIUS = 9.5;
+var emitterPositions = [];
+for (var i = 0; i < NUM; i++) {
+  var theta2 = (i / NUM) * Math.PI * 2;
+  emitterPositions.push(new THREE.Vector3(Math.cos(theta2) * RING_RADIUS, 0, Math.sin(theta2) * RING_RADIUS));
+}
+
+function hueForEmitter(i) { return 0.52 + (i / NUM) * 0.32; } // cyan -> violet band
+
+// small glow marker per emitter, brightens with that channel's real energy
+var emitterMarkers = [];
+for (var m = 0; m < NUM; m++) {
+  var markerColor = new THREE.Color().setHSL(hueForEmitter(m), 0.8, 0.62);
+  var markerGeo = new THREE.SphereGeometry(0.22, 12, 12);
+  var markerMat = new THREE.MeshBasicMaterial({ color: markerColor, transparent: true, opacity: 0.85 });
+  var marker = new THREE.Mesh(markerGeo, markerMat);
+  marker.position.copy(emitterPositions[m]);
+  rig.add(marker);
+  emitterMarkers.push(marker);
+}
+
+// ---------- particle burst system, additive sprites, custom shader for per-particle size ----------
+var PER_EMITTER = 46;
+var TOTAL = NUM * PER_EMITTER;
+var positions = new Float32Array(TOTAL * 3);
+var colorsAttr = new Float32Array(TOTAL * 3);
+var sizesAttr = new Float32Array(TOTAL);
+
+var pVel = [];
+var pAge = new Float32Array(TOTAL);
+var pLife = new Float32Array(TOTAL);
+var pEmitter = new Uint16Array(TOTAL);
+var pBaseColor = [];
+
+function spriteTexture() {
+  var cvs = document.createElement('canvas');
+  cvs.width = cvs.height = 64;
+  var ctx = cvs.getContext('2d');
+  var g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cvs);
+}
+var spriteTex = spriteTexture();
+
+function respawnParticle(p, energy) {
+  var e = pEmitter[p];
+  var origin = emitterPositions[e];
+  positions[p * 3] = origin.x;
+  positions[p * 3 + 1] = origin.y;
+  positions[p * 3 + 2] = origin.z;
+  var dir = new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.25) * 1.6, (Math.random() - 0.5)).normalize();
+  var speed = 0.9 + energy * 4.2 + Math.random() * 0.6;
+  pVel[p] = dir.multiplyScalar(speed);
+  pAge[p] = 0;
+  pLife[p] = 0.7 + Math.random() * 1.1;
+  sizesAttr[p] = 0;
+}
+
+for (var p = 0; p < TOTAL; p++) {
+  pEmitter[p] = Math.floor(p / PER_EMITTER);
+  var c = new THREE.Color().setHSL(hueForEmitter(pEmitter[p]), 0.85, 0.62);
+  pBaseColor.push(c);
+  colorsAttr[p * 3] = c.r; colorsAttr[p * 3 + 1] = c.g; colorsAttr[p * 3 + 2] = c.b;
+  respawnParticle(p, 0);
+  pAge[p] = Math.random() * pLife[p]; // desync initial bursts so they don't all fire in unison
+}
+
+var geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+geo.setAttribute('color', new THREE.BufferAttribute(colorsAttr, 3));
+geo.setAttribute('size', new THREE.BufferAttribute(sizesAttr, 1));
+
+var particleMat = new THREE.ShaderMaterial({
+  uniforms: { map: { value: spriteTex } },
+  vertexShader: [
+    'attribute float size;',
+    'attribute vec3 color;',
+    'varying vec3 vColor;',
+    'void main(){',
+    '  vColor = color;',
+    '  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
+    '  gl_PointSize = size * (320.0 / -mvPosition.z);',
+    '  gl_Position = projectionMatrix * mvPosition;',
+    '}'
+  ].join('\\n'),
+  fragmentShader: [
+    'precision mediump float;',
+    'uniform sampler2D map;',
+    'varying vec3 vColor;',
+    'void main(){',
+    '  vec4 tex = texture2D(map, gl_PointCoord);',
+    '  gl_FragColor = vec4(vColor, 1.0) * tex;',
+    '}'
+  ].join('\\n'),
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+var points = new THREE.Points(geo, particleMat);
+rig.add(points);
+
+// ---------- live data state ----------
+var angleEnergy = new Float32Array(NUM);   // smoothed 0..1 "how alive" each channel is right now
+var lastAngle = new Float32Array(NUM).fill(90);
+var haveAngle = new Uint8Array(NUM);
+var latestSensor = 0;      // 0..1023
+var sensorSmooth = 0;      // 0..1
+var connected = false;
+var connectedSmooth = 0;   // eases the wake/sleep transition instead of snapping
+
+var dashDot = document.getElementById('dashDot');
+var dashState = document.getElementById('dashState');
+var ffDot = document.getElementById('ffDot');
+var ffState = document.getElementById('ffState');
+var simTimeEl = document.getElementById('simTime');
+var sensorEl = document.getElementById('sensorVal');
+var note = document.getElementById('disconnectedNote');
+
+function connectSocket() {
+  var ws = new WebSocket('ws://' + location.host);
+  ws.onopen = function () {
+    dashDot.classList.add('live'); dashState.textContent = 'live'; note.style.display = 'none';
+  };
+  ws.onmessage = function (evt) {
+    var data;
+    try { data = JSON.parse(evt.data); } catch (e) { return; }
+    if (Array.isArray(data.angles)) {
+      for (var i = 0; i < data.angles.length && i < NUM; i++) {
+        var a = data.angles[i];
+        var deviation = Math.abs(a - 90) / 90;               // 0..1, how far from neutral
+        var delta = haveAngle[i] ? Math.abs(a - lastAngle[i]) / 90 : 0; // 0..~1+, how fast it just moved
+        var instant = Math.min(1, deviation * 0.5 + delta * 2.2);
+        angleEnergy[i] = angleEnergy[i] * 0.75 + instant * 0.25; // smoothed, but responsive within a few frames
+        lastAngle[i] = a; haveAngle[i] = 1;
+      }
+    }
+    if (typeof data.simTime === 'number') simTimeEl.textContent = data.simTime.toFixed(1) + 's';
+    if (typeof data.sensor === 'number') { latestSensor = data.sensor; sensorEl.textContent = data.sensor + ' / 1023'; }
+    connected = !!data.formfindConnected;
+    ffDot.classList.toggle('live', connected);
+    ffState.textContent = connected ? 'connected' : 'not connected';
+  };
+  ws.onclose = function () {
+    dashDot.classList.remove('live'); dashState.textContent = 'disconnected'; note.style.display = 'block';
+    connected = false;
+    setTimeout(connectSocket, 1500);
+  };
+  ws.onerror = function () { ws.close(); };
+}
+connectSocket();
+
+// ---------- animate ----------
+var clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  var dt = Math.min(clock.getDelta(), 0.05);
+  var t = clock.elapsedTime;
+
+  connectedSmooth += ((connected ? 1 : 0.3) - connectedSmooth) * Math.min(1, dt * 1.5);
+  sensorSmooth += ((latestSensor / 1023) - sensorSmooth) * Math.min(1, dt * 3);
+
+  var avgEnergy = 0;
+  for (var i = 0; i < NUM; i++) avgEnergy += angleEnergy[i];
+  avgEnergy = NUM ? (avgEnergy / NUM) : 0;
+
+  // emitter markers brighten with their own channel's real energy
+  for (var m = 0; m < NUM; m++) {
+    var em = angleEnergy[m] * connectedSmooth;
+    var scale = 1 + em * 1.8;
+    emitterMarkers[m].scale.setScalar(scale);
+    emitterMarkers[m].material.opacity = (0.35 + em * 0.65) * (0.4 + connectedSmooth * 0.6);
+  }
+
+  // particles: continuous respawn scaled by that channel's energy — always some drift even idle,
+  // never fully dead, same "no dead zone on the slider" principle as the main app's turbulence fix
+  var posAttr = geo.attributes.position;
+  var sizeAttr = geo.attributes.size;
+  for (var p = 0; p < TOTAL; p++) {
+    pAge[p] += dt;
+    if (pAge[p] >= pLife[p]) {
+      respawnParticle(p, angleEnergy[pEmitter[p]] * connectedSmooth);
+    }
+    var lifeT = pAge[p] / pLife[p]; // 0..1
+    positions[p * 3] += pVel[p].x * dt;
+    positions[p * 3 + 1] += pVel[p].y * dt;
+    positions[p * 3 + 2] += pVel[p].z * dt;
+    var fade = Math.sin(Math.min(1, lifeT) * Math.PI); // ramps up then back down over its life
+    var energyHere = angleEnergy[pEmitter[p]] * connectedSmooth;
+    sizesAttr[p] = (1.1 + energyHere * 3.2) * fade;
+  }
+  posAttr.needsUpdate = true;
+  sizeAttr.needsUpdate = true;
+
+  // core pulses with the real A0 sensor reading + overall energy
+  var pulse = 1 + sensorSmooth * 0.5 + avgEnergy * 0.35;
+  core.scale.setScalar(pulse * connectedSmooth + (1 - connectedSmooth) * 0.7);
+  core.rotation.y += dt * (0.15 + avgEnergy * 0.6);
+  core.rotation.x += dt * 0.05;
+  coreLight.intensity = (1.5 + sensorSmooth * 4 + avgEnergy * 3) * connectedSmooth;
+
+  // slow cinematic orbit, speeds up a little with overall energy — never stops
+  rig.rotation.y += dt * (0.045 + avgEnergy * 0.09) * (0.4 + connectedSmooth * 0.6);
+
+  bloomPass.strength = (0.9 + avgEnergy * 1.6 + sensorSmooth * 0.6) * (0.35 + connectedSmooth * 0.65);
+
+  composer.render();
+}
+animate();
+
+window.addEventListener('resize', function () {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 </body>
 </html>`;
