@@ -89,6 +89,15 @@
     font-family:var(--font-ui); letter-spacing:0.03em; pointer-events:none;
     background:rgba(6,7,8,0.55); padding:4px 8px; border-radius:5px;
   }
+  #stageViewControls{
+    position:absolute; right:10px; top:10px; display:flex; gap:6px; z-index:2;
+  }
+  #stageViewControls button{
+    background:rgba(6,7,8,0.65); border:1px solid var(--line); color:var(--ink-soft);
+    font-family:var(--font-ui); font-size:11px; letter-spacing:0.03em; padding:6px 10px;
+    border-radius:6px; cursor:pointer; transition:background 120ms, color 120ms;
+  }
+  #stageViewControls button:hover{ background:rgba(20,22,26,0.85); color:var(--ink); }
 
   .panel{
     margin-top:14px; background:var(--card); border:1px solid var(--line);
@@ -150,13 +159,14 @@
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "avr8js": "https://cdn.jsdelivr.net/npm/avr8js@0.21.0/+esm"
   }
 }
 </script>
 
 <script>
-const APP_VERSION = '1.17.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.20.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -212,9 +222,9 @@ function showHelp(){
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of popsicle-stick figures, each with one arm swinging on a servo, in elevation like the real piece, with a side/angled view toggle. It's driven by the same angle calculation the real serial connection uses, and even slew-rate-limits the motion to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of popsicle-stick figures, each with one arm swinging on a servo, in elevation like the real piece, with a side/angled view toggle. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each figure's angle measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — popsicle-stick figures, each with one arm swinging on a servo, driven by FORMFIND's own on-screen state with no hardware or bridge needed. For a live preview driven by the actual servo firmware instead — no real hardware needed there either — use "Connect via Simulator Bridge": <code>avr8js_sim_bridge.js</code> runs FORMFIND's real firmware locally over a plain WebSocket (no WebSerial, no virtual COM port, no Wokwi account) and opens its own live browser dashboard at <code>http://localhost:8766</code> to watch it move — see AVR8JS_SETUP.md.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — popsicle-stick figures, each with one arm swinging on a servo. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each figure's angle is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -298,9 +308,18 @@ const audioEngine = {
    is active — to a physical rig of hobby servos, one per evenly-spaced column band.
    Chrome/Edge only (WebSerial isn't in the spec for Firefox/Safari). Protocol and
    firmware: see arduino/formfind_servo/formfind_servo.ino. */
-const HW_HEIGHT_MIN = -2, HW_HEIGHT_MAX = 4; // practical sphere-height range across modes
+const HW_HEIGHT_MIN = -2, HW_HEIGHT_MAX = 4; // absolute fallback range only — see HW_AGC below for the range actually used
 const HW_ANGLE_MIN = 20, HW_ANGLE_MAX = 160; // stay off the 0/180 end-stops
 const HW_SEND_INTERVAL_MS = 50; // ~20Hz — plenty for visible motion, easy on the Uno's serial buffer
+// Auto-gain per band: a fixed height->angle window (above) meant most songs/sections only ever
+// filled a narrow slice of it, so the real signal barely moved the arms even though the audio
+// underneath was genuinely dynamic — this was the actual cause of the rig looking "stagnant",
+// not a lack of decoration. Each band tracks its own recent min/max and maps against THAT,
+// so a quiet verse and a loud chorus both use the full angle swing, and a change in the real
+// per-band average height still reads as a real angle change either way.
+let hwAgcMin = null, hwAgcMax = null; // lazily sized to servoCount in computeServoAngles
+const HW_AGC_RISE = 0.35, HW_AGC_FALL_PER_SEC = 0.55; // peaks/floors track fast up, relax slowly back
+let hwAgcLastT = null; // computeServoAngles is called both from rAF (3D preview) and hardware-bridge.js's own interval (real hardware) — self-timed so it works from either
 const hardwareEngine = {
   connected: false,
   servoCount: 8,
@@ -395,6 +414,539 @@ function applySensorReading(norm){
   }
 }
 
+/* ================= Embedded avr8js firmware simulation =================
+   Runs formfind_servo.ino's REAL compiled firmware directly in this browser
+   tab via avr8js (github.com/wokwi/avr8js, MIT — the same open-source AVR
+   core that powers Wokwi itself, which runs entirely client-side). No
+   Node.js, no terminal, no npm install — this is the exact same simulation
+   formfind_servo/avr8js_sim_bridge.js does from a terminal (same hex, same
+   CPU/peripheral setup, same PWM-pulse decode), just running inside this
+   page instead. That external script + its own live dashboard still work
+   and remain useful (a separate window, a shareable ws:// endpoint for
+   other tools) — this doesn't replace them, it just means checking "Show
+   simulated rig" needs nothing else running.
+   Loaded from a CDN (jsdelivr) at runtime, not bundled — if that fails
+   (offline, CDN blocked), this falls back to the direct angle-mirror
+   preview FORMFIND always had, rather than breaking outright. */
+const EMBEDDED_FIRMWARE_HEX = `:100000000C945F000C9447040C9420040C9487001B
+:100010000C9487000C9487000C9487000C946E0459
+:100020000C9487000C9487000C9487000C94EE04C9
+:100030000C9487000C9487000C9487000C94870024
+:100040000C94D6030C9487000C94D0050C94AA054C
+:100050000C9487000C9487000C9487000C94870004
+:100060000C9487000C9487000200000000240027F5
+:10007000002A0000000000250028002B00040404D2
+:100080000404040404020202020202030303030341
+:10009000030102040810204080010204081020011E
+:1000A0000204081020000000080002010000030400
+:1000B000070000000000000000000206C60811242E
+:1000C0001FBECFEFD8E0DEBFCDBF11E0A0E0B1E0B2
+:1000D000E8E7F7E102C005900D92A634B107D9F721
+:1000E00022E0A6E4B1E001C01D92A734B207E1F717
+:1000F00010E0CEE5D0E004C02197FE010E94AC09DB
+:10010000CD35D107C9F70E947B060C94AF0B0C9438
+:10011000000090E0FC01EB55FF4F2491FC01EF56ED
+:10012000FF4F3491FC01E358FF4FE491EE23C9F0F7
+:10013000222339F0233001F1A8F4213019F12230C3
+:1001400029F1F0E0EE0FFF1FED58FF4FA591B4919C
+:100150008FB7F894EC91611126C030953E233C9303
+:100160008FBF08952730A9F02830C9F0243049F70F
+:10017000809180008F7D03C0809180008F77809375
+:100180008000DFCF84B58F7784BDDBCF84B58F7DD2
+:10019000FBCF8091B0008F778093B000D2CF809159
+:1001A000B0008F7DF9CF3E2BDACF0895CF92DF924A
+:1001B000EF92FF92CF93DF93EC01603282E07807F9
+:1001C000CCF5653B710514F064EB70E0898128E89B
+:1001D00030E0281B310987FD3395220F331F220F92
+:1001E000331F6901330FEE08FF088A8128E532E0EA
+:1001F000281B310987FD3395220F331F220F331F30
+:10020000032E000C440B550B2C193D094E095F09B8
+:10021000DB0177FF02C0B0E0A0E00E94300924EBD0
+:1002200030E040E050E00E940609C20ED31EE41EFA
+:10023000F51EB60128812C3008F03DC0398188E8D0
+:1002400090E0831B910937FD9395880F991F880FC4
+:10025000991F681779077CF03A8188E592E0831B43
+:10026000910937FD9395880F991F880F991F68177B
+:1002700079070CF4CB014FB7F89430E00297092EC0
+:10028000000CAA0BBB0B54E0880F991FAA1FBB1FC1
+:100290005A95D1F763E0B695A795979587956A9596
+:1002A000D1F7F901EE0FFF1FE20FF31FED59FE4FDB
+:1002B000928381834FBFDF91CF91FF90EF90DF90CA
+:1002C000CF900895AF92BF92CF92DF92EF92FF92BC
+:1002D0000F931F93CF93DF936C017B018B01040F6E
+:1002E000151FEB015E01AE18BF08C017D10759F00A
+:1002F0006991D601ED91FC910190F081E02DC6014C
+:100300000995892B79F7C501DF91CF911F910F9145
+:10031000FF90EF90DF90CF90BF90AF900895FC01D9
+:10032000538D448D252F30E0842F90E0821B930B5A
+:10033000541710F0CF96089501970895FC01918D00
+:10034000828D981761F0A28DAE0FBF2FB11D5D9603
+:100350008C91928D9F5F9F73928F90E008958FEFA5
+:100360009FEF0895FC01918D828D981731F0828D59
+:10037000E80FF11D858D90E008958FEF9FEF0895B0
+:10038000FC01918D228D892F90E0805C9F4F821B14
+:1003900091098F739927089586EA91E00E94C00120
+:1003A00021E0892B09F420E0822F089580E090E07D
+:1003B000892B29F00E94CC0181110C940000089532
+:1003C000FC01A48DA80FB92FB11DA35ABF4F2C91CA
+:1003D000848D90E001968F739927848FA689B789C1
+:1003E0002C93A089B1898C91837080648C93938DB8
+:1003F000848D981306C00288F389E02D80818F7D5B
+:1004000080830895EF92FF920F931F93CF93DF9312
+:10041000EC0181E0888F9B8D8C8D98131AC0E88940
+:10042000F989808185FF15C09FB7F894EE89FF890F
+:100430006083E889F98980818370806480839FBFAD
+:1004400081E090E0DF91CF911F910F91FF90EF90AD
+:100450000895F62E0B8D10E00F5F1F4F0F731127BD
+:10046000E02E8C8D8E110CC00FB607FCFACFE889F8
+:10047000F989808185FFF5CFCE010E94E001F1CF9F
+:10048000EB8DEC0FFD2FF11DE35AFF4FF0829FB76C
+:10049000F8940B8FEA89FB8980818062CFCFCF935C
+:1004A000DF93EC01888D8823B9F0AA89BB89E8899C
+:1004B000F9898C9185FD03C0808186FD0DC00FB642
+:1004C00007FCF7CF8C9185FFF2CF808185FFEDCFC0
+:1004D000CE010E94E001E9CFDF91CF910895FB01A9
+:1004E00001900020E9F73197AF01461B570BDC0163
+:1004F000ED91FC910280F381E02D09948F929F92FF
+:10050000AF92BF92EF92FF920F931F93CF93DF931F
+:10051000CDB7DEB7A1970FB6F894DEBF0FBECDBF43
+:100520007C01FA01CB0119A2223008F42AE08E01E5
+:100530000F5D1F4F822E912CB12CA12CBF01A50164
+:1005400094010E946F09F901CA016A300CF5605DDF
+:10055000D8016E938D01232B242B252B79F790E066
+:1005600080E0109721F0BD01C7010E946F02A196A3
+:100570000FB6F894DEBF0FBECDBFDF91CF911F91B4
+:100580000F91FF90EF90BF90AF909F908F90089544
+:10059000695CDECF8F929F92AF92BF92CF92DF9233
+:1005A000EF92FF920F931F93CF93DF937C01EB01A8
+:1005B0006C0182E0C80ED11C4701E5E08E0E911C53
+:1005C00010E000E0F60141916F0150E070E060E062
+:1005D0002AE0CE010E947E025C01E881F98101904F
+:1005E000F081E02D6EE2CE0109958A0D9B1D080F6A
+:1005F000191FC814D90431F7F701458150E070E0A4
+:1006000060E02AE0CE010E947E02800F911FDF9100
+:10061000CF911F910F91FF90EF90DF90CF90BF90FF
+:10062000AF909F908F900895FC01808191810097F9
+:1006300011F00C944E0A08950F931F93CF93DF93FC
+:10064000EC0188819981009759F02A813B81261716
+:10065000370730F081E0DF91CF911F910F9108951E
+:100660008B016F5F7F4F0E94D70A009759F09983E3
+:1006700088831B830A832C813D81232B59F7FC013E
+:100680001082E8CF80E0E7CFEF92FF920F931F93A5
+:10069000CF93DF93EC017B018A01BA010E941C0316
+:1006A00028813981811114C02115310519F0C90142
+:1006B0000E944E0A198218821D821C821B821A8295
+:1006C000CE01DF91CF911F910F91FF90EF90089590
+:1006D0001D830C83B701C9010E94A80BF1CFFB0158
+:1006E00001900020E9F73197AF01461B570B0C949E
+:1006F0004403CF92DF92EF92FF920F931F93CF9319
+:10070000DF93EC016B017A014617570720F48D2D1A
+:100710006A01E62EF82E198218821B821A821D8227
+:100720001C8250E040E064E471E0CE010E9444038A
+:1007300000918C0110918D01C016D10600F5E016D4
+:10074000F10608F48701E0918801F0918901E00F3A
+:10075000F11FF080108260918801709189016C0D09
+:100760007D1D61157105A9F0CE010E946F03809176
+:10077000880190918901080F191FF801F082CE01BC
+:10078000DF91CF911F910F91FF90EF90DF90CF906D
+:10079000089588819981009711F00E944E0A19826C
+:1007A00018821D821C821B821A82E1CF1F920F9237
+:1007B0000FB60F9211242F933F938F939F93AF9374
+:1007C000BF9380915F0190916001A0916101B09110
+:1007D000620130915E0123E0230F2D3758F5019619
+:1007E000A11DB11D20935E0180935F019093600174
+:1007F000A0936101B093620180915A0190915B01D5
+:10080000A0915C01B0915D010196A11DB11D809385
+:100810005A0190935B01A0935C01B0935D01BF917D
+:10082000AF919F918F913F912F910F900FBE0F909D
+:100830001F90189526E8230F0296A11DB11DD2CF57
+:100840001F920F920FB60F9211242F933F934F9345
+:100850005F936F937F938F939F93AF93BF93EF9328
+:10086000FF93E0910301F09104010995FF91EF914D
+:10087000BF91AF919F918F917F916F915F914F91B8
+:100880003F912F910F900FBE0F901F9018951F92C0
+:100890000F920FB60F9211242F933F934F935F93B4
+:1008A0006F937F938F939F93AF93BF93EF93FF9338
+:1008B000E0910101F09102010995FF91EF91BF9143
+:1008C000AF919F918F917F916F915F914F913F91E8
+:1008D0002F910F900FBE0F901F9018951F920F929F
+:1008E0000FB60F9211242F933F934F935F936F9303
+:1008F0007F938F939F93AF93BF93EF93FF938091D9
+:10090000520190915301A0915401B0915501892B4E
+:100910008A2B8B2BC1F19091510180910000892786
+:10092000809300008091520190915301A091540155
+:10093000B0915501181619061A061B069CF48091F1
+:10094000520190915301A0915401B091550101972A
+:10095000A109B1098093520190935301A0935401CE
+:10096000B0935501FF91EF91BF91AF919F918F91FE
+:100970007F916F915F914F913F912F910F900FBE9B
+:100980000F901F90189580910001E8E6F0E0E49147
+:100990009FEF90930001E13051F030F0E23069F0C8
+:1009A00060E00E948900DECF10926E00F9CF909136
+:1009B0006F009D7F90936F00F3CF909170009D7FAB
+:1009C0009093700091E09093B0009091B100987F67
+:1009D00094609093B1001092B300E2CF1F920F92F7
+:1009E0000FB60F9211242F933F934F935F936F9302
+:1009F0007F938F939F93AF93BF93CF93DF93EF93A7
+:100A0000FF9380915001C0918701D0E087FF24C0FF
+:100A10001092850010928400809150018F5F809326
+:100A2000500180915001082E000C990B8C179D07E6
+:100A300024F4809150018C30C4F180918400909115
+:100A40008500049680349C4908F47AC08091840023
+:100A500090918500049676C080915001082E000C7C
+:100A6000990B8C179D07C4F6E09150018E2FEE0F65
+:100A7000990BFC01EE0FFF1FE80FF91FED59FE4F18
+:100A8000808186FFC9CFE09150018E2FEE0F990B28
+:100A9000FC01EE0FFF1FE80FF91FED59FE4F80819B
+:100AA00060E08F730E948900B7CF2091840030915D
+:100AB0008500E09150018E2FEE0F990BFC01EE0F97
+:100AC000FF1FE80FF91FED59FE4F81819281820FC0
+:100AD000931F9093890080938800E09150018E2F9E
+:100AE000EE0F990BFC01EE0FFF1FE80FF91FED59F8
+:100AF000FE4F808186FF11C0E09150018E2FEE0FD6
+:100B0000990BFC01EE0FFF1FE80FF91FED59FE4F87
+:100B1000808161E08F730E948900FF91EF91DF91E6
+:100B2000CF91BF91AF919F918F917F916F915F9185
+:100B30004F913F912F910F900FBE0F901F901895DE
+:100B400080E49CE990938900809388008FEF8093E4
+:100B50005001E3CF1F920F920FB60F9211242F93E3
+:100B60003F934F935F936F937F938F939F93AF9335
+:100B7000BF93EF93FF9386EA91E00E94E001FF911B
+:100B8000EF91BF91AF919F918F917F916F915F9105
+:100B90004F913F912F910F900FBE0F901F9018957E
+:100BA0001F920F920FB60F9211242F938F939F9342
+:100BB000EF93FF93E091B601F091B7018081E0914E
+:100BC000BC01F091BD0182FD1BC090818091BF01ED
+:100BD0008F5F8F732091C001821741F0E091BF01B8
+:100BE000F0E0EA55FE4F958F8093BF01FF91EF91A2
+:100BF0009F918F912F910F900FBE0F901F9018957E
+:100C00008081F4CFEEE8F1E02FEF48EB5BE08091DC
+:100C100087018C3008F06DC091E0980F90938701A8
+:100C2000808390E0DC01AA0FBB1FA80FB91FAD594C
+:100C3000BE4F12965C934E931197339681E0E63A3D
+:100C4000F80729F7109289011092880110928B0100
+:100C500010928A0110928D0110928C0150E040E0B8
+:100C600064E471E088E891E00E9444031092A901D5
+:100C70001092A80188EE93E0A0E0B0E08093AA0172
+:100C80009093AB01A093AC01B093AD018FE191E0E3
+:100C90009093A7018093A60185EC90E09093B30117
+:100CA0008093B20184EC90E09093B5018093B401FD
+:100CB00080EC90E09093B7018093B60181EC90E0D6
+:100CC0009093B9018093B80182EC90E09093BB01BE
+:100CD0008093BA0186EC90E09093BD018093BC01B3
+:100CE0001092BF011092C0011092C1011092C20176
+:100CF00008952083A2CFCF93DF9300D000D000D0FF
+:100D0000CDB7DEB7789484B5826084BD84B5816048
+:100D100084BD85B5826085BD85B5816085BD8091C6
+:100D20006E00816080936E0010928100809181003E
+:100D30008260809381008091810081608093810036
+:100D4000809180008160809380008091B1008460F8
+:100D50008093B1008091B00081608093B000809159
+:100D60007A00846080937A0080917A008260809318
+:100D70007A0080917A00816080937A0080917A0075
+:100D8000806880937A001092C100E091B601F091E2
+:100D9000B70182E08083E091B201F091B30110824B
+:100DA000E091B401F091B50180E180831092BE0121
+:100DB000E091BA01F091BB0186E08083E091B80137
+:100DC000F091B901808180618083E091B801F09158
+:100DD000B901808188608083E091B801F091B90108
+:100DE000808180688083E091B801F091B9018081B1
+:100DF0008F7D80830EE811E0F12CE12C5CE0D52E94
+:100E000062E0C62ED8018C918C3008F074C0F701D6
+:100E1000EE0FFF1FE55FFE4F20813181C901992749
+:100E2000FC01EF56FF4F449183589F4FFC01849182
+:100E3000882399F090E0880F991FFC01E759FF4F34
+:100E4000A591B491FC01ED58FF4F859194918FB716
+:100E5000F894EC914E2B4C938FBFD8018C91482F76
+:100E600050E0FA01EE0FFF1FE40FF51FED59FE4FA2
+:100E7000922F9F732081207C292B208311961C9216
+:100E8000119712961C926D2D0E94A0098D9DA001B4
+:100E9000112430E020E0BA01620F731FFB01EE0F56
+:100EA000FF1FE60FF71FED59FE4F908196FD15C00D
+:100EB0002F5F3F4F2C30310571F781110EC010921A
+:100EC0008000C09281001092850010928400B19A37
+:100ED00080916F00826080936F00D801EC918E2F1B
+:100EE00090E0FC01EE0FFF1FE80FF91FED59FE4FD8
+:100EF0008081806480836AE570E0C8010E94D6002A
+:100F0000BFEFEB1AFB0A0D5F1F4FE8E0EE16F1048E
+:100F100009F078CF60E870E088E891E00E941C0357
+:100F20006DE271E086EA91E00E946F0262E471E096
+:100F300086EA91E00E946F0226EA422E21E0522EBC
+:100F400086EA91E00E94C001181619060CF0ABC0A9
+:100F500086EA91E00E949E018A3009F076C0A09056
+:100F60008C01B0908D01A114B10409F467C0E09127
+:100F70008801F0918901309709F460C08081813443
+:100F800009F05CC08EE8C82E81E0D82EEE24E394F0
+:100F9000F12CEA14FB040CF051C04C145D0409F46C
+:100FA0004DC080908C0190908D01E814F90498F464
+:100FB00060908801709089016CE270E0C3018E0D31
+:100FC0009F1D0E949D0B009731F08C010619170997
+:100FD0000F3F100721F5A401B701CE0101960E9431
+:100FE00079030FEF1FEF89819A810097F9F00E9432
+:100FF000CA0897FFC2C070E060E0C6010E94D60038
+:1010000023E0C20ED11C0F3F1007A1F078018FEF33
+:10101000E81AF80ACE0101960E941403BACFA8017B
+:10102000B701CE0101960E947903DDCF60E070E048
+:10103000CB01E3CFCE0101960E94140364E471E07A
+:1010400088E891E00E946F037BCF8D3009F478CF60
+:1010500089831A8200918C0110918D010F5F1F4FBF
+:10106000B80188E891E00E941C03882399F0209140
+:1010700088013091890180918C0190918D01BE0190
+:101080006F5F7F4F820F931F0E94A80B10938D01FB
+:1010900000938C0180918C0190918D01893C910588
+:1010A00008F44ECFCBCF2FB7F89480915F01909189
+:1010B0006001A0916101B09162012FBF4091560182
+:1010C0005091570160915801709159018C019D0117
+:1010D000041B150B260B370BB901A8014233510530
+:1010E00061057105E8F18093560190935701A09333
+:1010F0005801B093590163E586EA91E00E9402022B
+:1011000080E480937C0080917A00806480937A00F0
+:1011100080917A0086FDFCCFC0907800D090790055
+:101120000D2C000CEE08FF082AE0B701A601F7FE1F
+:101130000DC06DE286EA91E00E9402024427552725
+:10114000BA014C195D096E097F092AE086EA91E02F
+:101150000E947E0262E471E086EA91E00E946F02E2
+:1011600080E090E0892B09F4EBCE0E94CC0188232B
+:1011700009F4E6CE0E940000E3CE653B71058105CF
+:1011800091050CF43ACF64EB70E037CF88E891E03A
+:101190000C9414031F93FC0199278827BC01E89441
+:1011A00011911032E9F3193010F01E30C8F31B32E0
+:1011B00051F01D3249F4689406C00E94F108610F95
+:1011C000711D811D911D119110531A30B0F33EF421
+:1011D00090958095709561957F4F8F4F9F4F1F9190
+:1011E0000895592F482F372F262F660F771F881FF6
+:1011F000991F660F771F881F991F620F731F841F27
+:10120000951F660F771F881F991F0895052E97FB5E
+:101210001EF400940E941D0957FD07D00E946F091B
+:1012200007FC03D04EF40C941D0950954095309561
+:1012300021953F4F4F4F5F4F089590958095709542
+:1012400061957F4F8F4F9F4F08950E949109A59FF1
+:10125000900DB49F900DA49F800D911D11240895B1
+:10126000B7FF0C9425090E942509821B930B089552
+:101270002F923F924F925F926F927F928F929F92A6
+:10128000AF92BF92CF92DF92EF92FF920F931F9394
+:10129000CF93DF93CDB7DEB7CA1BDB0B0FB6F89445
+:1012A000DEBF0FBECDBF09942A88398848885F8485
+:1012B0006E847D848C849B84AA84B984C884DF80F6
+:1012C000EE80FD800C811B81AA81B981CE0FD11DDA
+:1012D0000FB6F894DEBF0FBECDBFED010895A1E2B9
+:1012E0001A2EAA1BBB1BFD010DC0AA1FBB1FEE1FA0
+:1012F000FF1FA217B307E407F50720F0A21BB30BEB
+:10130000E40BF50B661F771F881F991F1A9469F766
+:1013100060957095809590959B01AC01BD01CF01C2
+:101320000895A29FB001B39FC001A39F700D811DBE
+:101330001124911DB29F700D811D1124911D0895DE
+:10134000991B79E004C0991F961708F0961B881F17
+:101350007A95C9F780950895EE0FFF1F0590F491D7
+:10136000E02D09940F931F93CF93DF938230910563
+:1013700010F482E090E0E0914502F091460230E006
+:1013800020E0B0E0A0E0309799F42115310509F490
+:101390004AC0281B390B24303105D8F58A819B813E
+:1013A0006115710589F1FB0193838283FE0111C0F0
+:1013B000408151810281138148175907E0F0481795
+:1013C000590799F4109761F012960C93129713969F
+:1013D0001C933296CF01DF91CF911F910F91089509
+:1013E0000093450210934602F4CF2115310551F0C8
+:1013F0004217530738F0A901DB019A01BD01DF0153
+:10140000F801C1CFEF01F9CF9093460280934502D6
+:10141000CDCFFE01E20FF31F81939193225031094A
+:1014200039832883D7CF2091430230914402232B64
+:1014300041F4209107013091080130934402209338
+:10144000430220910501309106012115310541F437
+:101450002DB73EB74091090150910A01241B350B6D
+:10146000E0914302F0914402E217F307A0F42E1B2F
+:101470003F0B2817390778F0AC014E5F5F4F2417F8
+:10148000350748F04E0F5F1F5093440240934302CC
+:10149000819391939FCFF0E0E0E09CCFCF93DF93D7
+:1014A0000097E9F0FC01329713821282A091450265
+:1014B000B0914602ED0130E020E01097A1F42081C8
+:1014C0003181820F931F20914302309144022817EB
+:1014D000390709F061C0F0934402E0934302DF91C1
+:1014E000CF910895EA01CE17DF07E8F54A815B81C5
+:1014F0009E0141155105B1F7E901FB83EA8349914A
+:101500005991C40FD51FEC17FD0761F480819181BB
+:101510000296840F951FE9019983888382819381C4
+:101520009B838A83F0E0E0E012968D919C91139763
+:101530000097B9F52D913C911197CD010296820F3C
+:10154000931F20914302309144022817390739F63E
+:10155000309751F51092460210924502B093440222
+:10156000A0934302BCCFD383C28340815181840FB7
+:10157000951FC817D90761F44E5F5F4F8881998125
+:10158000480F591F518340838A819B8193838283B3
+:101590002115310509F0B0CFF0934602E0934502E2
+:1015A0009ECFFD01DC01C0CF13821282D7CFB0E005
+:1015B000A0E0EDEDFAE00C943A098C01009751F4AB
+:1015C000CB010E94B2098C01C801CDB7DEB7E0E1C2
+:1015D0000C945609FC01E60FF71F9C0122503109BB
+:1015E000E217F30708F49DC0D901CD91DC91119762
+:1015F000C617D70798F0C530D10530F3CE01049750
+:101600008617970708F3C61BD70B2297C193D19370
+:101610006D937C93CF010E944E0AD6CF5B01AC1A2A
+:10162000BD0A4C018C0E9D1EA0914502B091460250
+:10163000512C412CF12CE12C109731F58091430273
+:10164000909144028815990509F05CC0461657062A
+:1016500008F058C08091050190910601009741F46F
+:101660008DB79EB74091090150910A01841B950BDB
+:10167000E817F90708F055C0F0934402E0934302DD
+:10168000F90171836083A0CF8D919C91119712967F
+:101690006C90129713967C901397A815B90559F57D
+:1016A0006C0142E0C40ED11CCA14DB0420F1AC0171
+:1016B0004A195B09DA011296159780F062827382EB
+:1016C00051834083D9016D937C93E114F10471F04F
+:1016D000D7011396FC93EE93129776CF22968C0F38
+:1016E0009D1FF90191838083F301EFCFF0934602B0
+:1016F000E093450269CF4816590608F42C017D0194
+:10170000D3019ACFCB010E94B2097C01009749F026
+:10171000AE01B8010E94940BC8010E944E0A8701D5
+:1017200053CF10E000E050CFFB01DC0102C001907C
+:101730000D9241505040D8F70895FC0181918617D1
+:1017400021F08823D9F7992708953197CF0108957B
+:10175000FB01DC0101900D920020E1F7089510E0FB
+:10176000CEE5D0E004C0FE010E94AC092196CF3541
+:08177000D107C9F7F894FFCF7F
+:10177800FFD500D500000047022000020003000446
+:10178800000500060007000800090000000000022C
+:101798000262018F014F02C0019E01B201464F5201
+:1017A8004D46494E442D534552564F2D52454144BE
+:0617B80059000D0A0000BB
+:00000001FF
+`;
+const HW_FIRMWARE_SERVO_COUNT = 8; // matches formfind_servo.ino's NUM_SERVOS/SERVO_PINS exactly — fixed by the real compiled firmware, not by the "servo count" field (that field still controls how many angles go out to real/external hardware; the embedded preview always mirrors the real 8-pin sketch)
+
+function loadIntelHex(source, target){
+  for(const line of source.split('\n')){
+    if(line[0] === ':' && line.substr(7, 2) === '00'){
+      const bytes = parseInt(line.substr(1, 2), 16);
+      const addr = parseInt(line.substr(3, 4), 16);
+      for(let i = 0; i < bytes; i++) target[addr + i] = parseInt(line.substr(9 + i * 2, 2), 16);
+    }
+  }
+}
+
+let hwFirmware = null; // { avr, cpu, avrInstruction, usart, adc, decodedAngles, rxQueue, sensorPhase }
+let hwFirmwareLoadPromise = null;
+let hwFirmwareLoadFailed = false;
+
+async function ensureHwFirmware(){
+  if(hwFirmware) return hwFirmware;
+  if(hwFirmwareLoadFailed) return null;
+  if(!hwFirmwareLoadPromise){
+    hwFirmwareLoadPromise = (async () => {
+      try {
+        const avr = await import('avr8js');
+        const { CPU, avrInstruction, AVRIOPort, AVRTimer, AVRUSART, AVRADC,
+                portBConfig, portCConfig, portDConfig,
+                timer0Config, timer1Config, timer2Config,
+                usart0Config, adcConfig } = avr;
+
+        const FLASH_WORDS = 0x8000; // 32K words = 64KB, matches ATmega328p program space
+        const program = new Uint16Array(FLASH_WORDS);
+        loadIntelHex(EMBEDDED_FIRMWARE_HEX, new Uint8Array(program.buffer));
+
+        const cpu = new CPU(program);
+        new AVRTimer(cpu, timer0Config);
+        new AVRTimer(cpu, timer1Config); // the one Servo.h actually uses for pulse timing
+        new AVRTimer(cpu, timer2Config);
+        const portB = new AVRIOPort(cpu, portBConfig); // digital pins 8-13
+        new AVRIOPort(cpu, portCConfig); // A0-A5, not GPIO-decoded here
+        const portD = new AVRIOPort(cpu, portDConfig); // digital pins 0-7
+        const usart = new AVRUSART(cpu, usart0Config, 16e6);
+        const adc = new AVRADC(cpu, adcConfig);
+        adc.avcc = 5;
+
+        // Servo pin decode — identical approach to avr8js_sim_bridge.js: measure the real PWM
+        // pulse widths the firmware's real Servo-library Timer1 ISR puts on the pins, not the
+        // angle we asked for. SERVO_PINS = {2..9} in formfind_servo.ino.
+        const SERVO_PIN_MAP = [
+          { port: 'D', bit: 2 }, { port: 'D', bit: 3 }, { port: 'D', bit: 4 }, { port: 'D', bit: 5 },
+          { port: 'D', bit: 6 }, { port: 'D', bit: 7 }, { port: 'B', bit: 0 }, { port: 'B', bit: 1 },
+        ];
+        const MIN_PULSE_US = 544, MAX_PULSE_US = 2400; // Servo.h MIN/MAX_PULSE_WIDTH
+        const riseCycle = { D: new Array(8).fill(null), B: new Array(8).fill(null) };
+        const decodedAngles = new Float32Array(HW_FIRMWARE_SERVO_COUNT).fill(90);
+
+        function handlePortEdges(port, value, oldValue){
+          const changed = value ^ oldValue;
+          for(let bit = 0; bit < 8; bit++){
+            if(!((changed >> bit) & 1)) continue;
+            const isHigh = !!((value >> bit) & 1);
+            if(isHigh){
+              riseCycle[port][bit] = cpu.cycles;
+            } else if(riseCycle[port][bit] !== null){
+              const pulseUs = (cpu.cycles - riseCycle[port][bit]) / 16; // 16MHz -> 16 cycles/us
+              riseCycle[port][bit] = null;
+              const idx = SERVO_PIN_MAP.findIndex((m) => m.port === port && m.bit === bit);
+              if(idx !== -1 && pulseUs > 300 && pulseUs < 3000){ // sanity window, ignores non-servo glitches
+                const angle = Math.max(0, Math.min(180, ((pulseUs - MIN_PULSE_US) / (MAX_PULSE_US - MIN_PULSE_US)) * 180));
+                decodedAngles[idx] = angle;
+              }
+            }
+          }
+        }
+        portD.addListener((v, o) => handlePortEdges('D', v, o));
+        portB.addListener((v, o) => handlePortEdges('B', v, o));
+
+        hwFirmware = { avr, cpu, avrInstruction, usart, adc, decodedAngles, rxQueue: [], sensorPhase: 0 };
+        return hwFirmware;
+      } catch(err){
+        console.error('Embedded firmware simulator failed to load (falling back to direct preview):', err);
+        hwFirmwareLoadFailed = true;
+        return null;
+      }
+    })();
+  }
+  return hwFirmwareLoadPromise;
+}
+
+const HW_FW_SUBSTEP_CYCLES = 200; // finer than one 115200-baud byte period (~1389 cycles), so queued serial bytes inject at genuine baud timing
+const HW_FW_MAX_CATCHUP_SEC = 0.1; // caps per-frame catch-up — this runs inside the main render loop, so a dropped frame shouldn't time-warp the firmware
+const HW_FW_MHZ = 16e6;
+
+function tickHwFirmware(fw, dt){
+  const elapsed = Math.min(dt, HW_FW_MAX_CATCHUP_SEC);
+  const targetCycles = fw.cpu.cycles + elapsed * HW_FW_MHZ;
+  while(fw.cpu.cycles < targetCycles){
+    const stepTarget = Math.min(targetCycles, fw.cpu.cycles + HW_FW_SUBSTEP_CYCLES);
+    while(fw.cpu.cycles < stepTarget){
+      fw.avrInstruction(fw.cpu);
+      fw.cpu.tick();
+    }
+    if(fw.rxQueue.length && !fw.usart.rxBusy) fw.usart.writeByte(fw.rxQueue.shift());
+  }
+  // Synthetic A0 sweep — same default avr8js_sim_bridge.js uses, purely so analogRead() and
+  // "Sensor drives" have something real (from the firmware's own analogRead(), not faked here)
+  // to report even with no physical potentiometer.
+  fw.sensorPhase = (fw.sensorPhase + dt) % 12;
+  const p = fw.sensorPhase < 6 ? fw.sensorPhase / 6 : (12 - fw.sensorPhase) / 6;
+  fw.adc.channelValues[0] = p * 5;
+}
+
+function sendHwFirmwareCommand(fw, angles){
+  const line = 'A' + angles.map((a) => Math.round(a)).join(',') + '\n';
+  for(const ch of line) fw.rxQueue.push(ch.charCodeAt(0) & 0xff);
+}
+
+function resampleToFirmwareServoCount(angles){
+  const n = angles.length;
+  if(n === HW_FIRMWARE_SERVO_COUNT) return angles;
+  const out = new Array(HW_FIRMWARE_SERVO_COUNT);
+  for(let i = 0; i < HW_FIRMWARE_SERVO_COUNT; i++){
+    out[i] = angles[Math.min(n - 1, Math.floor((i * n) / HW_FIRMWARE_SERVO_COUNT))];
+  }
+  return out;
+}
+
+let hwFirmwareStatusShown = null; // dedupe DOM writes — this gets called every frame
+function updateHwFirmwareStatusUi(){
+  const el = document.getElementById('hwFirmwareStatus');
+  if(!el) return;
+  let text;
+  if(hwFirmwareLoadFailed) text = 'Firmware simulator unavailable (couldn\'t load avr8js — offline, or the CDN is blocked) — showing a direct angle preview instead.';
+  else if(hwFirmware) text = 'Running the real compiled firmware (avr8js, embedded — no terminal needed).';
+  else text = 'Loading firmware simulator…';
+  if(text !== hwFirmwareStatusShown){ el.textContent = text; hwFirmwareStatusShown = text; }
+}
+
 function computeServoAngles(){
   const n = hardwareEngine.servoCount;
   const bandWidth = GRID_COLS / n;
@@ -406,10 +958,30 @@ function computeServoAngles(){
     sums[band] += state.currentY[i];
     counts[band]++;
   }
+
+  const now = performance.now();
+  const dt = hwAgcLastT === null ? 0.016 : Math.min(0.25, (now - hwAgcLastT) / 1000);
+  hwAgcLastT = now;
+  if(!hwAgcMin || hwAgcMin.length !== n){
+    hwAgcMin = new Float32Array(n).fill(HW_HEIGHT_MIN);
+    hwAgcMax = new Float32Array(n).fill(HW_HEIGHT_MAX);
+  }
+  const fallStep = HW_AGC_FALL_PER_SEC * dt;
+
   const angles = new Array(n);
   for(let b = 0; b < n; b++){
     const avg = counts[b] ? sums[b] / counts[b] : 0;
-    angles[b] = Math.round(mapRange(avg, HW_HEIGHT_MIN, HW_HEIGHT_MAX, HW_ANGLE_MIN, HW_ANGLE_MAX));
+
+    // Auto-gain: each band's own recent floor/ceiling, not a fixed absolute range — this is what
+    // actually fixed the "stagnant" look, since the real per-band signal now uses its full swing
+    // regardless of whether the current section (or mode) is quiet or loud.
+    if(avg > hwAgcMax[b]) hwAgcMax[b] += (avg - hwAgcMax[b]) * HW_AGC_RISE;
+    else hwAgcMax[b] = Math.max(avg, hwAgcMax[b] - fallStep);
+    if(avg < hwAgcMin[b]) hwAgcMin[b] += (avg - hwAgcMin[b]) * HW_AGC_RISE;
+    else hwAgcMin[b] = Math.min(avg, hwAgcMin[b] + fallStep);
+    const span = Math.max(0.5, hwAgcMax[b] - hwAgcMin[b]); // floor on span so near-silence doesn't get amplified into noise
+
+    angles[b] = Math.round(mapRange(avg, hwAgcMin[b], hwAgcMin[b] + span, HW_ANGLE_MIN, HW_ANGLE_MAX));
   }
   return angles;
 }
@@ -454,7 +1026,7 @@ function ensureHwSimScene(){
   if(!three || !three.THREE) return false; // main engine not loaded yet
   const container = document.getElementById('hwSimViewport');
   if(!container) return false;
-  if(hwSim && hwSim.count === hardwareEngine.servoCount) return true;
+  if(hwSim && hwSim.count === HW_FIRMWARE_SERVO_COUNT) return true; // always 8 now — mirrors the real compiled sketch, not the "servo count" field (see resampleToFirmwareServoCount)
 
   const THREE = three.THREE;
   if(hwSim){
@@ -465,17 +1037,28 @@ function ensureHwSimScene(){
   const w = container.clientWidth || 400, h = 280; // bigger now that it has its own space below the main stage, not squeezed into the panel
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x060708);
+  scene.fog = new THREE.Fog(0x060708, 8, 22);
 
-  const n = hardwareEngine.servoCount;
+  const n = HW_FIRMWARE_SERVO_COUNT; // always 8 — the on-screen preview mirrors the real compiled sketch's fixed pin count
   const spacing = 1.0;
   const totalWidth = (n - 1) * spacing;
   const requiredHeight = 1.9; // feet(0) to head-top(~1.3) with margin for the waving arm's swing
   const requiredWidth = totalWidth + 1.6; // room for arms swung fully horizontal on the end figures
   const aspect = w / h;
-  let camHeight = requiredHeight;
-  let camWidth = camHeight * aspect;
-  if(camWidth < requiredWidth){ camWidth = requiredWidth; camHeight = camWidth / aspect; }
-  const camera = new THREE.OrthographicCamera(-camWidth / 2, camWidth / 2, camHeight / 2, -camHeight / 2, 0.1, 20);
+
+  // Perspective, not orthographic — reads as genuinely 3D (matches the main kinetic-sculpture
+  // stage's own camera) instead of the flat/pancake look an orthographic projection gives a row
+  // of 3D figures. Distance is fit to the content once here and reused for both view modes in
+  // setHwSimView, with a margin generous enough that rotating to the angled azimuth doesn't push
+  // anything outside the frustum — that was the actual cause of the angled view clipping figures.
+  const FOV_DEG = 45;
+  const vFov = THREE.MathUtils.degToRad(FOV_DEG);
+  const distForHeight = (requiredHeight / 2) / Math.tan(vFov / 2);
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+  const distForWidth = (requiredWidth / 2) / Math.tan(hFov / 2);
+  const fitDist = Math.max(distForHeight, distForWidth) * 1.35; // margin covers the angled-view azimuth safely
+
+  const camera = new THREE.PerspectiveCamera(FOV_DEG, aspect, 0.1, 60);
 
   scene.add(new THREE.AmbientLight(0x8899aa, 0.7));
   const key = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -582,7 +1165,7 @@ function ensureHwSimScene(){
 
   hwSim = {
     THREE, scene, camera, renderer, container, armPivots, figureGroups, legLefts, legRights, restingArms,
-    headMats, handMats, trailArms, trailAngles,
+    headMats, handMats, trailArms, trailAngles, fitDist,
     sparkT: new Float32Array(n).fill(-1), // -1 = not currently sparking
     count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side'),
   };
@@ -593,12 +1176,15 @@ function ensureHwSimScene(){
 function setHwSimView(mode){
   if(!hwSim) return;
   hwSim.viewMode = mode;
+  const THREE = hwSim.THREE, d = hwSim.fitDist, targetY = 1.0;
   if(mode === 'angle'){
-    hwSim.camera.position.set(hwSim.totalWidth * 0.35, 2.3, 4.6);
+    const az = THREE.MathUtils.degToRad(34), el = THREE.MathUtils.degToRad(14);
+    const horizR = d * Math.cos(el);
+    hwSim.camera.position.set(horizR * Math.sin(az), targetY + d * Math.sin(el), horizR * Math.cos(az));
   } else {
-    hwSim.camera.position.set(0, 1.0, 6);
+    hwSim.camera.position.set(0, targetY, d);
   }
-  hwSim.camera.lookAt(0, 1.0, 0);
+  hwSim.camera.lookAt(0, targetY, 0);
   const btn = document.getElementById('hwSimViewBtn');
   if(btn) btn.textContent = mode === 'angle' ? 'Side view' : 'Angled view';
 }
@@ -618,10 +1204,31 @@ const HW_SPARK_DURATION = 0.4; // seconds
 function updateHwSimulator(now, dt){
   if(!hardwareEngine.simulate) return;
   if(!ensureHwSimScene()) return;
-  const target = computeServoAngles();
+
+  // Command angles come from the same computeServoAngles() real/external hardware already uses
+  // (same AGC, same servoCount) — resampled to exactly 8 to match the real firmware's fixed pin
+  // count, then actually sent through the real compiled firmware if it's loaded. If it isn't
+  // loaded yet (or failed to load — offline, CDN blocked), target falls back to the commanded
+  // angles directly, same as the app always did before this existed, so the preview never breaks.
+  const commandAngles = resampleToFirmwareServoCount(computeServoAngles());
+  if(!hwFirmware && !hwFirmwareLoadFailed) ensureHwFirmware(); // fire-and-forget; memoized, only kicks off once
+  let target = commandAngles;
+  hwSim.usingRealFirmware = false;
+  if(hwFirmware){
+    sendHwFirmwareCommand(hwFirmware, commandAngles);
+    tickHwFirmware(hwFirmware, dt);
+    target = hwFirmware.decodedAngles; // the real angle the real firmware's real PWM just emitted
+    hwSim.usingRealFirmware = true;
+  }
+  updateHwFirmwareStatusUi();
+
   const maxStep = HW_SERVO_SLEW_DEG_PER_SEC * dt; // real servos can't snap instantly to a new angle
   const moodMul = hardwareEngine.connected ? 1.4 : 1.0; // perk up when an actual rig/bridge is connected
   const tSec = now / 1000;
+  // Real beat-onset signal, already computed for the main field's shimmer (audioEngine.beatPulse) —
+  // reused here for a synchronized hop across the whole row on every detected beat. Only active
+  // in Audio mode; 0 otherwise, so it never fakes motion when there's no real beat to react to.
+  const beat = (engine.mode === 'audio') ? audioEngine.beatPulse : 0;
   for(let i = 0; i < hwSim.count; i++){
     const cur = hwSim.currentAngles[i];
     const tgt = target[i] !== undefined ? target[i] : 90;
@@ -662,7 +1269,8 @@ function updateHwSimulator(now, dt){
     // Idle secondary motion, phase-offset per figure so the row reads as a wave, not a lockstep twitch
     const phase = i * 0.5;
     const bob = Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + phase) * HW_IDLE_BOB_AMPLITUDE * moodMul;
-    hwSim.figureGroups[i].position.y = HW_HIP_Y + bob;
+    const beatHop = beat * 0.12; // real beat onset — every figure hops together, on the actual beat
+    hwSim.figureGroups[i].position.y = HW_HIP_Y + bob + beatHop;
     const legSwing = Math.sin(tSec * HW_IDLE_LEG_HZ * Math.PI * 2 + phase) * HW_IDLE_LEG_AMPLITUDE_DEG * moodMul;
     hwSim.legLefts[i].rotation.z = hwSim.THREE.MathUtils.degToRad(16 + legSwing);
     hwSim.legRights[i].rotation.z = hwSim.THREE.MathUtils.degToRad(-16 - legSwing);
@@ -1248,6 +1856,11 @@ function renderHome(){
   main.innerHTML = `
     <div id="stage">
       <div id="stageHint">drag to orbit &middot; scroll to zoom</div>
+      <div id="stageViewControls">
+        <button id="stageRecenterBtn" title="Reset camera to the default view">Recenter</button>
+        <button id="stageTopBtn" title="Look straight down">Top</button>
+        <button id="stageSideBtn" title="Look from the side">Side</button>
+      </div>
     </div>
 
     <div id="hwSimWrap" style="display:none; flex-direction:column; margin:0 0 18px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
@@ -1256,6 +1869,7 @@ function renderHome(){
         <button class="btn ghost" id="hwSimViewBtn" style="padding:5px 12px; font-size:12px;">Angled view</button>
       </div>
       <div id="hwSimViewport" style="width:100%; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);"></div>
+      <div id="hwFirmwareStatus" style="font-size:11px; color:var(--ink-soft); margin-top:8px;"></div>
     </div>
 
     <div class="panel">
@@ -1357,7 +1971,7 @@ function renderHome(){
         <div class="sliderRow" style="min-width:0;">
           <span class="label" style="width:auto; margin:0;">Servo count</span>
           <input type="number" id="hwServoCount" min="1" max="16" value="8" style="width:56px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:6px; padding:6px 8px;">
-          <span class="sliderVal" style="width:auto;">(must match NUM_SERVOS in the .ino)</span>
+          <span class="sliderVal" style="width:auto;">(for real/external hardware — must match NUM_SERVOS in the .ino; the on-screen preview below always mirrors the real 8-servo firmware regardless)</span>
         </div>
       </div>
       <div class="row">
@@ -1391,7 +2005,7 @@ function renderHome(){
       <div class="row" style="align-items:center;">
         <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); cursor:pointer;">
           <input type="checkbox" id="hwSimulateToggle">
-          Show simulated rig (3D preview, popsicle-stick figures with one waving arm each — appears below the main view above)
+          Show simulated rig (3D preview — runs FORMFIND's real firmware right here, no terminal needed)
         </label>
       </div>
     </div>
@@ -1559,6 +2173,17 @@ function renderHome(){
     engine.autoRotate = !engine.autoRotate;
     e.target.textContent = 'Auto-rotate: ' + (engine.autoRotate ? 'on' : 'off');
   };
+
+  const STAGE_DEFAULT_POS = [18, 16, 22]; // matches loadThree()'s initial camera.position
+  function setStageView(pos){
+    if(!three) return; // still loading — buttons work again once it's ready, no error needed
+    three.camera.position.set(pos[0], pos[1], pos[2]);
+    three.controls.target.set(0, 0, 0);
+    three.controls.update();
+  }
+  document.getElementById('stageRecenterBtn').onclick = ()=> setStageView(STAGE_DEFAULT_POS);
+  document.getElementById('stageTopBtn').onclick = ()=> setStageView([0, 30, 0.01]); // tiny Z offset avoids OrbitControls gimbal lock straight down
+  document.getElementById('stageSideBtn').onclick = ()=> setStageView([30, 2, 0]);
 
   updateModeButtons();
   initEngineIfNeeded();

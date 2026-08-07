@@ -126,7 +126,7 @@ check('categoryMeshes bucket-mesh pattern is present', /categoryMeshes/.test(src
 /* ===================== v1.4.0 — hardware bridge ===================== */
 sectionHeader('v1.4.0 — hardware bridge (WebSerial)');
 check('feature-detects navigator.serial before use', /'serial' in navigator/.test(src));
-check('servo angles are clamped via mapRange before sending', /mapRange\(avg, HW_HEIGHT_MIN, HW_HEIGHT_MAX, HW_ANGLE_MIN, HW_ANGLE_MAX\)/.test(src));
+check('servo angles are clamped via mapRange before sending', /mapRange\(avg, hwAgcMin\[b\], hwAgcMin\[b\] \+ span, HW_ANGLE_MIN, HW_ANGLE_MAX\)/.test(src));
 
 /* ===================== v1.8.0 — closed-loop sensor input ===================== */
 sectionHeader('v1.8.0 — closed-loop sensor input');
@@ -226,7 +226,7 @@ if (simBridgeSrc) {
 
 /* ===================== v1.17.0 — layout move + six "stand out" enhancements ===================== */
 sectionHeader('v1.17.0 — layout move + six "stand out" enhancements');
-check('3D preview moved out of the control panel to sit directly below the main kinetic-sculpture stage', /<div id="stage">[\s\S]{0,300}<div id="hwSimWrap"/.test(src));
+check('3D preview moved out of the control panel to sit directly below the main kinetic-sculpture stage', /<div id="stage">[\s\S]{0,600}<div id="hwSimWrap"/.test(src));
 check('3D preview viewport enlarged now that it has its own space (was fixed h=170)', /h = 280/.test(src));
 check('3D preview: motion trails (lagged ghost arms) implemented', /HW_TRAIL_LAG/.test(src) && /trailArms/.test(src));
 check('3D preview: head/hand glow driven by each figure\'s own real angle deviation, not decoration', /emissiveIntensity = deviation/.test(src));
@@ -241,6 +241,39 @@ if (simBridgeSrc) {
   check('avr8js dashboard: per-figure character variation (deterministic pseudoRandom, not per-frame noise)', /function pseudoRandom/.test(simBridgeSrc));
   check('avr8js dashboard: connection-status mood (.asleep class) driven by the real formfindConnected flag', /rig\.classList\.toggle\('asleep', !connected\)/.test(simBridgeSrc));
   check('avr8js dashboard: milestone spark class only re-triggers on a genuine extreme crossing, not every frame at the extreme', /wasNearExtreme\[i\] = nearExtreme/.test(simBridgeSrc));
+}
+
+/* ===================== v1.18.0 — root-cause fix for "stagnant" motion ===================== */
+sectionHeader('v1.18.0 — root-cause fix for "stagnant" motion');
+check('computeServoAngles uses per-band auto-gain (adaptive min/max), not the old fixed HW_HEIGHT_MIN/MAX window', /hwAgcMin\[b\]/.test(src) && /hwAgcMax\[b\]/.test(src));
+check('AGC peak/floor tracking is self-timed (works whether called from rAF or hardware-bridge.js\'s own interval)', /hwAgcLastT === null/.test(src));
+check('AGC has a span floor so near-silence doesn\'t get amplified into jittery noise', /Math\.max\(0\.5, hwAgcMax\[b\] - hwAgcMin\[b\]\)/.test(src));
+check('real beat-onset signal (audioEngine.beatPulse, already used for the field\'s shimmer) now also drives a synchronized hop across the rig', /const beat = \(engine\.mode === 'audio'\) \? audioEngine\.beatPulse : 0/.test(src) && /beatHop = beat \* 0\.12/.test(src));
+check('beat hop is zero outside Audio mode — doesn\'t fake motion when there\'s no real beat to react to', /beatPulse : 0/.test(src));
+
+/* ===================== v1.19.0 — main-stage view controls + sim preview 3D framing fix ===================== */
+sectionHeader('v1.19.0 — main-stage view controls + sim preview 3D framing fix');
+check('main stage has Recenter/Top/Side view control buttons', /id="stageRecenterBtn"/.test(src) && /id="stageTopBtn"/.test(src) && /id="stageSideBtn"/.test(src));
+check('view buttons reposition the real OrbitControls camera/target, not a fake overlay', /three\.controls\.target\.set\(0, 0, 0\)/.test(src) && /three\.controls\.update\(\)/.test(src));
+check('view buttons no-op safely if three.js hasn\'t finished loading yet, no error thrown', /if\(!three\) return; \/\/ still loading/.test(src));
+check('sim preview camera switched from orthographic to perspective (was reading as flat/2D)', /new THREE\.PerspectiveCamera\(FOV_DEG, aspect, 0\.1, 60\)/.test(src) && !/OrthographicCamera/.test(src));
+check('sim preview camera distance is fit to content once and reused for both view modes (root cause of angled-view clipping)', /fitDist/.test(src) && /hwSim\.fitDist/.test(src));
+check('angled view position is derived from the same fit distance as side view, not a separately-tuned fixed offset', /az = THREE\.MathUtils\.degToRad\(34\)/.test(src) && /horizR \* Math\.sin\(az\)/.test(src));
+
+/* ===================== v1.20.0 — embedded firmware simulator (no terminal needed) ===================== */
+sectionHeader('v1.20.0 — embedded firmware simulator (no terminal needed)');
+check('avr8js added to the import map (loaded from a CDN, no local install)', /"avr8js": "https:\/\/cdn\.jsdelivr\.net\/npm\/avr8js@0\.21\.0\/\+esm"/.test(src));
+check('the compiled firmware hex is embedded directly in index.html, not fetched from a separate file', /const EMBEDDED_FIRMWARE_HEX = `:10000000/.test(src));
+check('embedded firmware setup mirrors avr8js_sim_bridge.js\'s CPU/peripheral setup (same timers, ports, USART, ADC)', /new AVRTimer\(cpu, timer1Config\)/.test(src) && /new AVRUSART\(cpu, usart0Config, 16e6\)/.test(src));
+check('embedded firmware decodes servo angles from measured PWM pulses, same approach as the external bridge', /riseCycle\[port\]\[bit\] = cpu\.cycles/.test(src) && /MIN_PULSE_US = 544, MAX_PULSE_US = 2400/.test(src));
+check('embedded firmware load failure falls back gracefully (direct preview), doesn\'t break the feature', /hwFirmwareLoadFailed = true/.test(src) && /target = commandAngles/.test(src));
+check('sim preview always mirrors the real firmware\'s fixed 8-servo count, decoupled from the "servo count" field', /const n = HW_FIRMWARE_SERVO_COUNT;/.test(src) && /HW_FIRMWARE_SERVO_COUNT = 8/.test(src));
+check('commanded angles are resampled to the firmware\'s fixed servo count before being sent, not just truncated silently', /function resampleToFirmwareServoCount/.test(src));
+check('a visible status line tells the user which mode is actually active (real firmware vs. fallback vs. loading)', /id="hwFirmwareStatus"/.test(src) && /updateHwFirmwareStatusUi/.test(src));
+check('firmware tick is time-based off the real per-frame dt, not a fixed step count (stays real-time paced)', /HW_FW_MAX_CATCHUP_SEC/.test(src) && /elapsed = Math\.min\(dt, HW_FW_MAX_CATCHUP_SEC\)/.test(src));
+if (fs.existsSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md'))) {
+  const setupDoc = fs.readFileSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md'), 'utf8');
+  check('AVR8JS_SETUP.md updated to present the embedded version as the default path, not just the external script', /don't need anything in this/.test(setupDoc) && /embedded/.test(setupDoc));
 }
 
 /* ===================== Summary ===================== */
