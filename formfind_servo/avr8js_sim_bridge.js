@@ -311,21 +311,32 @@ function buildDashboardHtml(numServos) {
   .dot{width:7px; height:7px; border-radius:50%; background:#555; flex:none;}
   .dot.live{background:var(--accent); box-shadow:0 0 8px var(--accent-deep);}
   .rig{
-    display:flex; gap:18px; flex-wrap:wrap; justify-content:center;
+    display:flex; gap:14px; flex-wrap:wrap; justify-content:center;
     background:var(--paper-deep); border:1px solid var(--line); border-radius:14px;
-    padding:32px 24px 20px;
+    padding:32px 20px 20px;
   }
-  .servo{display:flex; flex-direction:column; align-items:center; gap:8px; width:56px;}
+  .servo{display:flex; flex-direction:column; align-items:center; gap:8px; width:70px;}
   .servo .angle{font-size:12px; color:var(--accent); font-variant-numeric:tabular-nums; min-height:16px;}
   .servo .idx{font-size:10px; color:var(--ink-soft); letter-spacing:0.05em;}
   svg{overflow:visible;}
   .arm{transition:transform 60ms linear;}
   .disconnectedNote{margin-top:22px; font-size:12px; color:var(--ink-soft); text-align:center; max-width:420px; line-height:1.5;}
+  /* Idle secondary motion — decorative only, driven by elapsed time (CSS animation-delay gives
+     each figure a phase offset for a wave effect), not by any servo data. The .arm group's
+     transform (set from JS in setAngle) is the only piece of this tied to real angle data. */
+  @keyframes idleBob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4px); } }
+  @keyframes legSwingL { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(6deg); } }
+  @keyframes legSwingR { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(-6deg); } }
+  @keyframes restArmSway { 0%,100%{ transform:rotate(0deg); } 50%{ transform:rotate(10deg); } }
+  .figureSvg{ animation: idleBob 1.8s ease-in-out infinite; }
+  .legL{ animation: legSwingL 1.8s ease-in-out infinite; }
+  .legR{ animation: legSwingR 1.8s ease-in-out infinite; }
+  .restArm{ animation: restArmSway 2.6s ease-in-out infinite; }
 </style>
 </head>
 <body>
   <h1>FORMFIND — avr8js live rig</h1>
-  <p class="sub">Every figure below is a popsicle-stick person whose arm is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock.</p>
+  <p class="sub">Every figure below is a popsicle-stick person whose arm is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock. (The idle bob/leg-sway is just decoration to keep them from looking frozen — only the one swinging arm per figure is actual data.)</p>
   <div class="statusRow">
     <div class="stat"><span class="dot" id="dashDot"></span> dashboard <b id="dashState">connecting…</b></div>
     <div class="stat"><span class="dot" id="ffDot"></span> FORMFIND <b id="ffState">not connected</b></div>
@@ -348,47 +359,53 @@ function buildDashboardHtml(numServos) {
     wrap.className = 'servo';
     const svgns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgns, 'svg');
-    svg.setAttribute('width', '52'); svg.setAttribute('height', '84'); svg.setAttribute('viewBox', '0 0 52 84');
+    svg.setAttribute('width', '64'); svg.setAttribute('height', '104'); svg.setAttribute('viewBox', '0 0 70 116');
+    svg.setAttribute('class', 'figureSvg');
+    const delay = (i * 0.12).toFixed(2) + 's';
+    svg.style.animationDelay = delay;
 
-    // legs (static) — hip at (26,50) down to feet at y=76
+    // legs — hip at (35,66) down to feet at y=100, idle-swaying (decorative, phase-offset per figure)
     const legL = document.createElementNS(svgns, 'line');
-    legL.setAttribute('x1', '26'); legL.setAttribute('y1', '50'); legL.setAttribute('x2', '18'); legL.setAttribute('y2', '76');
-    legL.setAttribute('stroke', STICK); legL.setAttribute('stroke-width', '3'); legL.setAttribute('stroke-linecap', 'round');
+    legL.setAttribute('x1', '35'); legL.setAttribute('y1', '66'); legL.setAttribute('x2', '25'); legL.setAttribute('y2', '100');
+    legL.setAttribute('stroke', STICK); legL.setAttribute('stroke-width', '4'); legL.setAttribute('stroke-linecap', 'round');
+    legL.setAttribute('class', 'legL'); legL.style.transformOrigin = '35px 66px'; legL.style.animationDelay = delay;
     svg.appendChild(legL);
     const legR = document.createElementNS(svgns, 'line');
-    legR.setAttribute('x1', '26'); legR.setAttribute('y1', '50'); legR.setAttribute('x2', '34'); legR.setAttribute('y2', '76');
-    legR.setAttribute('stroke', STICK); legR.setAttribute('stroke-width', '3'); legR.setAttribute('stroke-linecap', 'round');
+    legR.setAttribute('x1', '35'); legR.setAttribute('y1', '66'); legR.setAttribute('x2', '45'); legR.setAttribute('y2', '100');
+    legR.setAttribute('stroke', STICK); legR.setAttribute('stroke-width', '4'); legR.setAttribute('stroke-linecap', 'round');
+    legR.setAttribute('class', 'legR'); legR.style.transformOrigin = '35px 66px'; legR.style.animationDelay = delay;
     svg.appendChild(legR);
 
-    // torso (static) — hip (26,50) up to shoulder (26,26)
+    // torso (static) — hip (35,66) up to shoulder (35,34)
     const torso = document.createElementNS(svgns, 'line');
-    torso.setAttribute('x1', '26'); torso.setAttribute('y1', '50'); torso.setAttribute('x2', '26'); torso.setAttribute('y2', '26');
-    torso.setAttribute('stroke', STICK); torso.setAttribute('stroke-width', '4'); torso.setAttribute('stroke-linecap', 'round');
+    torso.setAttribute('x1', '35'); torso.setAttribute('y1', '66'); torso.setAttribute('x2', '35'); torso.setAttribute('y2', '34');
+    torso.setAttribute('stroke', STICK); torso.setAttribute('stroke-width', '5'); torso.setAttribute('stroke-linecap', 'round');
     svg.appendChild(torso);
 
     // head (static)
     const head = document.createElementNS(svgns, 'circle');
-    head.setAttribute('cx', '26'); head.setAttribute('cy', '14'); head.setAttribute('r', '8');
+    head.setAttribute('cx', '35'); head.setAttribute('cy', '18'); head.setAttribute('r', '10');
     head.setAttribute('fill', 'var(--accent)');
     svg.appendChild(head);
 
-    // resting arm (static) — a fixed second arm so it reads as a figure, not just one stick with an arm
+    // resting arm — idle-swaying (decorative), a second arm so it reads as a figure, not just one stick with an arm
     const restArm = document.createElementNS(svgns, 'line');
-    restArm.setAttribute('x1', '26'); restArm.setAttribute('y1', '26'); restArm.setAttribute('x2', '32'); restArm.setAttribute('y2', '46');
-    restArm.setAttribute('stroke', STICK); restArm.setAttribute('stroke-width', '3'); restArm.setAttribute('stroke-linecap', 'round');
+    restArm.setAttribute('x1', '35'); restArm.setAttribute('y1', '34'); restArm.setAttribute('x2', '43'); restArm.setAttribute('y2', '60');
+    restArm.setAttribute('stroke', STICK); restArm.setAttribute('stroke-width', '4'); restArm.setAttribute('stroke-linecap', 'round');
+    restArm.setAttribute('class', 'restArm'); restArm.style.transformOrigin = '35px 34px'; restArm.style.animationDelay = (i * 0.18).toFixed(2) + 's';
     svg.appendChild(restArm);
 
-    // driven arm — pivots at the shoulder (26,26); hangs straight down by default (0-180 servo -> ±90° swing)
+    // driven arm — pivots at the shoulder (35,34); hangs straight down by default (0-180 servo -> ±90° swing)
     const armGroup = document.createElementNS(svgns, 'g');
     armGroup.setAttribute('class', 'arm');
-    armGroup.style.transformOrigin = '26px 26px';
+    armGroup.style.transformOrigin = '35px 34px';
     const armLine = document.createElementNS(svgns, 'line');
-    armLine.setAttribute('x1', '26'); armLine.setAttribute('y1', '26');
-    armLine.setAttribute('x2', '26'); armLine.setAttribute('y2', '48');
-    armLine.setAttribute('stroke', STICK); armLine.setAttribute('stroke-width', '3'); armLine.setAttribute('stroke-linecap', 'round');
+    armLine.setAttribute('x1', '35'); armLine.setAttribute('y1', '34');
+    armLine.setAttribute('x2', '35'); armLine.setAttribute('y2', '63');
+    armLine.setAttribute('stroke', STICK); armLine.setAttribute('stroke-width', '4'); armLine.setAttribute('stroke-linecap', 'round');
     armGroup.appendChild(armLine);
     const hand = document.createElementNS(svgns, 'circle');
-    hand.setAttribute('cx', '26'); hand.setAttribute('cy', '48'); hand.setAttribute('r', '3.2');
+    hand.setAttribute('cx', '35'); hand.setAttribute('cy', '63'); hand.setAttribute('r', '4.2');
     hand.setAttribute('fill', 'var(--accent-deep)');
     armGroup.appendChild(hand);
     svg.appendChild(armGroup);
