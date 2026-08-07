@@ -166,7 +166,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.21.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.22.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -1884,7 +1884,11 @@ function tick(now){
       const fz = state.baseZ[n] * 0.35 + state.chaosSeedZ[n];
       ty = noise2D(fx, fz, t * 0.6) * 1.6 * engine.turbulence;
     } else {
-      ty = state.targetY[n];
+      // Resolved (fixed-target) spheres still get a small live wobble so Speed/Turbulence
+      // remain audibly-visibly "doing something" even outside the chaos phase, instead of
+      // going inert the instant a shape is held. Scales to zero when turbulence is 0.
+      const wobble = noise2D(state.baseX[n] * 0.5, state.baseZ[n] * 0.5, t * 0.8) * 0.15 * engine.turbulence;
+      ty = state.targetY[n] + wobble;
     }
     const rate = lerpRate * (0.6 + state.delay[n] * 0.8);
     state.currentY[n] += (ty - state.currentY[n]) * Math.min(1, rate);
@@ -2046,17 +2050,20 @@ function renderHome(){
       <div class="row">
         <span class="sliderVal" id="hwStatus" style="width:auto; text-align:left;">Not connected.</span>
       </div>
-      <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
-        <div class="label">Or connect over a plain WebSocket — no WebSerial, no virtual COM port, works in any browser. <code>avr8js_sim_bridge.js</code> runs FORMFIND's real firmware locally (no Wokwi account needed) and opens its own live visual dashboard at <code>http://localhost:8766</code> — stick figures waving from real firmware output. See AVR8JS_SETUP.md.</div>
-        <div class="row" style="margin-top:0;">
-          <input id="wokwiWsUrlInput" type="text" value="ws://localhost:8765" style="flex:1; min-width:140px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
-          <button class="btn secondary" id="wokwiWsConnectBtn">Connect via Simulator Bridge</button>
-          <button class="btn ghost" id="wokwiWsDisconnectBtn" style="display:none;">Disconnect</button>
+      <details style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
+        <summary style="cursor:pointer; font-size:13px; color:var(--ink-soft); user-select:none;">Advanced: external Simulator Bridge (optional — "Show simulated rig" above already runs the real firmware in-page with no setup)</summary>
+        <div class="row" style="margin-top:10px;">
+          <div class="label">For the standalone dashboard at <code>http://localhost:8766</code>, or to let another tool tap the same feed: run <code>avr8js_sim_bridge.js</code> from a terminal, then connect here. See AVR8JS_SETUP.md.</div>
+          <div class="row" style="margin-top:0;">
+            <input id="wokwiWsUrlInput" type="text" value="ws://localhost:8765" style="flex:1; min-width:140px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
+            <button class="btn secondary" id="wokwiWsConnectBtn">Connect via Simulator Bridge</button>
+            <button class="btn ghost" id="wokwiWsDisconnectBtn" style="display:none;">Disconnect</button>
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <span class="sliderVal" id="wokwiWsStatus" style="width:auto; text-align:left;">Not connected.</span>
+          </div>
         </div>
-        <div class="row" style="margin-top:6px;">
-          <span class="sliderVal" id="wokwiWsStatus" style="width:auto; text-align:left;">Not connected.</span>
-        </div>
-      </div>
+      </details>
       <div class="row" style="align-items:center; border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
         <div class="label">Sensor input — a potentiometer or photoresistor on the Arduino can drive a control here live, closing the loop back into FORMFIND.</div>
         <div class="group">
