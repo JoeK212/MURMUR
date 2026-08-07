@@ -2,7 +2,8 @@
 
 An Arduino Uno + 8 servos (pins 2-9), pre-wired to match `formfind_servo.ino`'s
 defaults exactly. Paste these two files into a new Wokwi project to get a
-working simulated version of the rig in about a minute, no hardware needed.
+working simulated version of the rig in about a minute, no hardware needed —
+useful purely as a **visual reference** for how the real wiring looks.
 
 ## Setup
 
@@ -28,54 +29,22 @@ real build later, add/remove `wokwi-servo` parts and connections in
 `diagram.json` to match — the pattern for each servo is three connections
 (PWM, V+, GND) following the same three lines used for the others.
 
-## Making it live (music/servos actually tied together, not just a visual reference)
+## This embed is a static reference only
 
-The embed panel in FORMFIND itself is deliberately a *static* reference —
-Wokwi doesn't have a stable, documented way to receive live data from another
-page. There are two ways to make it genuinely live, though:
+The embed panel in FORMFIND itself is deliberately *static* — paste a link,
+see the board as wired, nothing more. It's not live-linked to what's playing
+in FORMFIND, and there's no plan to make it so: Wokwi doesn't have a stable,
+documented way to receive live data from another page (their own
+"connect to a real serial port" browser feature is explicitly marked
+*"unsupported and undocumented"* by the Wokwi team).
 
-### Recommended: WebSocket bridge (no drivers, works in any browser)
-
-This is the one to use. No virtual COM ports, no driver signing, no risk of
-hitting a Secure Boot wall like the WebSerial route below can.
-
-1. Install **VS Code** + the **"Wokwi for VS Code"** extension, open this
-   `arduino/formfind_servo/` folder in it, and start the simulation from the
-   Wokwi sidebar (or F1 → "Wokwi: Start Simulator"). Keep the simulator panel
-   visible — if it's hidden, the simulation pauses and everything goes quiet.
-   `wokwi.toml` here already has `rfc2217ServerPort = 4000` set for this.
-2. `pip install websockets pyserial`, then run:
-   ```
-   python wokwi_ws_bridge.py
-   ```
-   It listens on `ws://localhost:8765` by default.
-3. In FORMFIND's Physical Rig panel, use **"Connect via Wokwi Bridge"** (the
-   second connection option, below "Connect Arduino") — the URL field already
-   defaults to `ws://localhost:8765`, so just click it.
-
-Now servo commands from FORMFIND — driven by whatever's actually on screen,
-audio mode included — flow into Wokwi's running simulation over a plain
-WebSocket, and any sensor reading you wire into the simulated circuit flows
-back the same way. Watch the servos move in the Wokwi simulator panel in VS
-Code while FORMFIND plays. `wokwi_ws_bridge.py`'s own header comment has the
-same steps.
-
-### Alternative: WebSerial + virtual COM port (more setup, can hit OS walls)
-
-`wokwi_bridge.py` (the other script in this folder) does the same thing over
-WebSerial instead, using FORMFIND's "Connect Arduino" button — which means it
-needs a virtual COM port pair (com0com on Windows, socat on Mac) sitting in
-between. This is the original approach and it does work, but com0com's
-driver isn't always signed in a way modern Windows will load without
-enabling Test Signing Mode — and on some systems, Secure Boot blocks that
-entirely, which would mean disabling Secure Boot in BIOS to proceed (not
-something to do casually — it can trigger a BitLocker recovery prompt on
-some machines). If you hit that wall, use the WebSocket bridge above
-instead — it doesn't touch any of this.
-
-There's also a plain-browser-only path (no VS Code) — Wokwi's own team
-describes a "connect to a real serial port" feature on wokwi.com itself, but
-by their own admission it's *"unsupported and undocumented,"* and I couldn't
-confirm where its control currently lives in the UI. The VS Code + RFC2217
-route above uses only documented, stable Wokwi features, which is why I'd
-reach for it first.
+**For servos actually moving with what's on screen, use `avr8js_sim_bridge.js`
+instead** (see `AVR8JS_SETUP.md`) — it runs FORMFIND's real firmware locally
+over a plain WebSocket and opens its own live browser dashboard, with no
+Wokwi account, no VS Code, and no virtual COM port anywhere in the chain.
+An earlier version of this project relayed through a real Wokwi cloud
+simulation for the live link instead; that approach hit three separate
+infrastructure walls in testing (a virtual-COM-port driver that wouldn't
+load, a Secure Boot policy that blocked the workaround, and finally the
+Wokwi VS Code extension not opening its own relay port at all) and was
+retired once avr8js_sim_bridge.js made all of that unnecessary.

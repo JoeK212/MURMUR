@@ -2,30 +2,55 @@
 
 Runs `formfind_servo.ino`'s real, compiled firmware inside `avr8js`
 (github.com/wokwi/avr8js — the open-source, MIT-licensed AVR simulation
-core that powers Wokwi itself) and bridges it to FORMFIND over the exact
-same WebSocket protocol `wokwi_ws_bridge.py` uses. No Wokwi account, no
-VS Code, no RFC2217, no virtual COM port, no driver signing — just
-Node.js.
+core that powers Wokwi itself) and bridges it to FORMFIND over a plain
+WebSocket. No Wokwi account, no VS Code, no RFC2217, no virtual COM port,
+no driver signing — just Node.js.
 
-Use this instead of `wokwi_ws_bridge.py` when you want a live, moving
-simulation without any of Wokwi's own infrastructure in the loop. Both
-scripts speak the same protocol on the same default port (`8765`), so
-FORMFIND's "Connect via Wokwi Bridge" button and its `ws://localhost:8765`
-default work with either one unchanged — run whichever script, not both
-at once (they'd fight over the port).
+This is the only WebSocket bridge backend in the project now — an earlier
+version (`wokwi_ws_bridge.py`) relayed to a real Wokwi cloud simulation
+instead, but it depended on the Wokwi VS Code extension's RFC2217 support,
+which hit three separate infrastructure walls in testing (a virtual-COM-port
+driver that wouldn't load, a Secure Boot policy blocking the workaround, and
+finally the extension not opening its own relay port at all). It's been
+retired; this script replaces it entirely and needs none of that.
+
 
 ## Setup
 
 1. `cd formfind_servo && npm install` (installs `avr8js` and `ws`)
 2. `node avr8js_sim_bridge.js` — it prints `Listening on ws://localhost:8765`
    and starts streaming live servo angles and sim time to the terminal
-3. In FORMFIND's Physical Rig panel, click **"Connect via Wokwi Bridge"** —
+3. Open **http://localhost:8766** in a browser tab — a live dashboard with
+   8 rotating servo arms, updating in real time
+4. In FORMFIND's Physical Rig panel, click **"Connect via Simulator Bridge"** —
    the URL field already defaults to `ws://localhost:8765`
-4. Switch modes / play audio in FORMFIND — the terminal's servo-angle
-   readout moves live, decoded from the firmware's own real PWM output
+5. Switch modes / play audio in FORMFIND — both the terminal's servo-angle
+   readout and the dashboard's arms move live, decoded from the firmware's
+   own real PWM output
 
 Ctrl+C to stop. The simulated firmware keeps running the whole time the
-script is up, connected or not — same as a real Arduino would.
+script is up, connected or not — same as a real Arduino would. The
+dashboard works even before FORMFIND connects (arms just sit at the
+firmware's neutral 90° boot position), and reconnects on its own if you
+restart the bridge script while the tab stays open.
+
+## The live dashboard (http://localhost:8766)
+
+A self-served page — no separate install, no build step. It shows:
+
+- 8 servo arms, each rotating to match the real angle measured off that
+  servo's real PWM pulse, updated ~20x/second
+- Sim time and the current A0 sensor reading (see below)
+- Whether FORMFIND is actually connected right now
+
+This is a different thing from FORMFIND's own "Show simulated rig"
+checkbox: that one mirrors FORMFIND's *on-screen* state directly, with no
+firmware involved. This dashboard only ever shows what the real firmware
+actually did with the angles it was sent — if there's a bug in
+`formfind_servo.ino`'s handling, this dashboard shows the bug; the
+on-screen checkbox never would, because it doesn't run the firmware at
+all. Pass `--dashboard-port=9000` to use a different port, or
+`--no-dashboard` to skip serving it entirely.
 
 ## What's real vs. simulated here
 
@@ -55,10 +80,11 @@ script is up, connected or not — same as a real Arduino would.
   `--sensor=off` to leave it silent. This is the one part of the setup
   that isn't measuring anything real — everything else in the chain is.
 
-## When to use this vs. `wokwi_ws_bridge.py`
+## If you want to see the physical wiring layout too
 
-Reach for this one first — it has no external dependency to fail. Use the
-Wokwi relay instead only if you specifically want the visual Wokwi
-simulator panel itself (seeing the board and servos rendered in a browser
-tab), which this script doesn't provide — it's terminal-only, no visual
-board.
+This script's dashboard shows 8 abstract arms, not a rendered board. For a
+visual of the actual wiring (board, servo parts, pin connections), FORMFIND's
+Physical Rig panel also has a static Wokwi circuit embed — paste a
+wokwi.com project link there. It's not live-linked to anything (deliberately
+— see `WOKWI_SETUP.md`), just a wiring reference to look at alongside this
+script's live dashboard.

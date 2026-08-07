@@ -9,10 +9,8 @@
   Just Node.js running the genuine ATmega328p machine code.
 
   Speaks the exact same line protocol over the exact same default WebSocket
-  port (8765) as wokwi_ws_bridge.py, so FORMFIND's existing "Connect via
-  Wokwi Bridge" button and ws://localhost:8765 field work with this bridge
-  unchanged — it's a drop-in alternative backend, not a new FORMFIND feature.
-  Run one bridge script or the other, never both at once (port conflict).
+  port (8765) as the retired wokwi_ws_bridge.py, so FORMFIND's "Connect via
+  Simulator Bridge" button and ws://localhost:8765 field work unchanged.
 
   WHAT'S ACTUALLY SIMULATED
   --------------------------
@@ -38,7 +36,7 @@
   -----
   1. cd formfind_servo && npm install        (installs avr8js + ws)
   2. node avr8js_sim_bridge.js               (listens on ws://localhost:8765)
-  3. In FORMFIND's Physical Rig panel, click "Connect via Wokwi Bridge" —
+  3. In FORMFIND's Physical Rig panel, click "Connect via Simulator Bridge" —
      the default URL (ws://localhost:8765) already matches. No Wokwi account
      needed, no VS Code, no simulation panel to keep open.
 
@@ -80,6 +78,8 @@ function argValue(name, fallback) {
 const WS_PORT = parseInt(argValue('port', '8765'), 10);
 const HEX_PATH = argValue('hex', path.join(__dirname, 'formfind_servo.hex'));
 const SENSOR_ARG = argValue('sensor', 'sweep'); // 'sweep' | 'off' | a number 0-1023
+const DASHBOARD_PORT = parseInt(argValue('dashboard-port', '8766'), 10);
+const DASHBOARD_ENABLED = !args.includes('--no-dashboard');
 
 // ---------- Intel HEX loader (same minimal parser avr8js's own demo uses) ----------
 function loadHex(source, target) {
@@ -233,11 +233,211 @@ wss.on('connection', (ws) => {
   ws.on('error', () => {});
 });
 
+// ---------- Live browser dashboard: watch the real firmware's servo output move ----------
+// This is a second, independent thing from the FORMFIND<->firmware WS link above — a small
+// self-served page showing the SAME currentAngles this script already measures from real PWM,
+// animated. Nothing here feeds back into the firmware or FORMFIND; it's read-only, purely so
+// there's somewhere to *watch* what avr8js_sim_bridge.js proved was happening in the terminal
+// numbers. Unlike FORMFIND's own "Show simulated rig" checkbox (which mirrors FORMFIND's
+// on-screen state), every angle drawn here came from measuring the real firmware's real PWM
+// pulses — if the firmware misbehaves, this dashboard is wrong in the same way, which is the
+// point.
+let httpServer = null;
+let dashboardWss = null;
+const dashboardSockets = new Set();
+
+if (DASHBOARD_ENABLED) {
+  const http = require('http');
+  const DASHBOARD_HTML = buildDashboardHtml(SERVO_PIN_MAP.length);
+
+  httpServer = http.createServer((req, res) => {
+    if (req.url === '/' || req.url === '/index.html') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(DASHBOARD_HTML);
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+    }
+  });
+
+  dashboardWss = new WebSocket.Server({ server: httpServer });
+  dashboardWss.on('connection', (ws) => {
+    dashboardSockets.add(ws);
+    ws.on('close', () => dashboardSockets.delete(ws));
+    ws.on('error', () => {});
+  });
+
+  httpServer.listen(DASHBOARD_PORT);
+
+  setInterval(() => {
+    if (!dashboardSockets.size) return;
+    const msg = JSON.stringify({
+      angles: currentAngles,
+      simTime: cpu.cycles / MHZ,
+      sensor: Math.round(sensorValueNow()),
+      formfindConnected: sockets.size > 0,
+    });
+    for (const ws of dashboardSockets) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+    }
+  }, 50); // ~20Hz, matches the firmware's own sensor-send cadence
+}
+
+function buildDashboardHtml(numServos) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FORMFIND — avr8js live rig</title>
+<style>
+  :root{
+    --paper:#0B0C0E; --paper-deep:#060708; --card:#131519;
+    --ink:#E8E9EB; --ink-soft:#8A8F98; --line:#23262C;
+    --accent:#7DD3FC; --accent-deep:#38BDF8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,'Space Grotesk','Inter',sans-serif;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:28px 16px 40px;
+  }
+  h1{font-size:15px; font-weight:600; letter-spacing:0.02em; margin:0 0 4px; color:var(--ink);}
+  .sub{font-size:12px; color:var(--ink-soft); margin:0 0 22px; text-align:center; max-width:560px; line-height:1.5;}
+  .statusRow{display:flex; gap:18px; align-items:center; margin-bottom:26px; flex-wrap:wrap; justify-content:center;}
+  .stat{background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:7px;}
+  .stat b{color:var(--ink); font-weight:600;}
+  .dot{width:7px; height:7px; border-radius:50%; background:#555; flex:none;}
+  .dot.live{background:var(--accent); box-shadow:0 0 8px var(--accent-deep);}
+  .rig{
+    display:flex; gap:22px; flex-wrap:wrap; justify-content:center;
+    background:var(--paper-deep); border:1px solid var(--line); border-radius:14px;
+    padding:32px 24px 20px;
+  }
+  .servo{display:flex; flex-direction:column; align-items:center; gap:8px; width:64px;}
+  .servo .angle{font-size:12px; color:var(--accent); font-variant-numeric:tabular-nums; min-height:16px;}
+  .servo .idx{font-size:10px; color:var(--ink-soft); letter-spacing:0.05em;}
+  svg{overflow:visible;}
+  .arm{transition:transform 60ms linear;}
+  .disconnectedNote{margin-top:22px; font-size:12px; color:var(--ink-soft); text-align:center; max-width:420px; line-height:1.5;}
+</style>
+</head>
+<body>
+  <h1>FORMFIND — avr8js live rig</h1>
+  <p class="sub">Every arm below is driven by the real formfind_servo.ino firmware's real PWM output, measured off the simulated pins — not FORMFIND's on-screen state, not a mock.</p>
+  <div class="statusRow">
+    <div class="stat"><span class="dot" id="dashDot"></span> dashboard <b id="dashState">connecting…</b></div>
+    <div class="stat"><span class="dot" id="ffDot"></span> FORMFIND <b id="ffState">not connected</b></div>
+    <div class="stat">sim time <b id="simTime">0.0s</b></div>
+    <div class="stat">A0 sensor <b id="sensorVal">—</b></div>
+  </div>
+  <div class="rig" id="rig"></div>
+  <p class="disconnectedNote" id="disconnectedNote" style="display:none;">Lost the connection to avr8js_sim_bridge.js — make sure that terminal is still running, then reload this page.</p>
+
+<script>
+(function(){
+  const NUM = ${numServos};
+  const rig = document.getElementById('rig');
+  const arms = [];
+  const labels = [];
+
+  for (let i = 0; i < NUM; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'servo';
+    const svgns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgns, 'svg');
+    svg.setAttribute('width', '56'); svg.setAttribute('height', '70'); svg.setAttribute('viewBox', '0 0 56 70');
+
+    const post = document.createElementNS(svgns, 'rect');
+    post.setAttribute('x', '24'); post.setAttribute('y', '40'); post.setAttribute('width', '8'); post.setAttribute('height', '26');
+    post.setAttribute('rx', '2'); post.setAttribute('fill', '#23262C');
+    svg.appendChild(post);
+
+    const pivot = document.createElementNS(svgns, 'circle');
+    pivot.setAttribute('cx', '28'); pivot.setAttribute('cy', '40'); pivot.setAttribute('r', '4');
+    pivot.setAttribute('fill', '#8A8F98');
+    svg.appendChild(pivot);
+
+    const armGroup = document.createElementNS(svgns, 'g');
+    armGroup.setAttribute('class', 'arm');
+    armGroup.style.transformOrigin = '28px 40px';
+    const armLine = document.createElementNS(svgns, 'line');
+    armLine.setAttribute('x1', '28'); armLine.setAttribute('y1', '40');
+    armLine.setAttribute('x2', '28'); armLine.setAttribute('y2', '10');
+    armLine.setAttribute('stroke', '#7DD3FC'); armLine.setAttribute('stroke-width', '3'); armLine.setAttribute('stroke-linecap', 'round');
+    armGroup.appendChild(armLine);
+    const armEnd = document.createElementNS(svgns, 'circle');
+    armEnd.setAttribute('cx', '28'); armEnd.setAttribute('cy', '10'); armEnd.setAttribute('r', '3.5');
+    armEnd.setAttribute('fill', '#38BDF8');
+    armGroup.appendChild(armEnd);
+    svg.appendChild(armGroup);
+
+    wrap.appendChild(svg);
+    const angleLabel = document.createElement('div');
+    angleLabel.className = 'angle'; angleLabel.textContent = '—';
+    wrap.appendChild(angleLabel);
+    const idxLabel = document.createElement('div');
+    idxLabel.className = 'idx'; idxLabel.textContent = 'pin ' + (i + 2);
+    wrap.appendChild(idxLabel);
+
+    rig.appendChild(wrap);
+    arms.push(armGroup);
+    labels.push(angleLabel);
+  }
+
+  function setAngle(i, deg) {
+    // 0-180 servo angle -> arm rotation, 90deg = straight up (neutral boot position)
+    const rotation = deg - 90;
+    arms[i].style.transform = 'rotate(' + rotation + 'deg)';
+    labels[i].textContent = deg + '°';
+  }
+
+  const dashDot = document.getElementById('dashDot');
+  const dashState = document.getElementById('dashState');
+  const ffDot = document.getElementById('ffDot');
+  const ffState = document.getElementById('ffState');
+  const simTimeEl = document.getElementById('simTime');
+  const sensorEl = document.getElementById('sensorVal');
+  const note = document.getElementById('disconnectedNote');
+
+  function connect() {
+    const ws = new WebSocket('ws://' + location.host);
+    ws.onopen = () => {
+      dashDot.classList.add('live'); dashState.textContent = 'live'; note.style.display = 'none';
+    };
+    ws.onmessage = (evt) => {
+      let data;
+      try { data = JSON.parse(evt.data); } catch (e) { return; }
+      if (Array.isArray(data.angles)) data.angles.forEach((a, i) => { if (arms[i]) setAngle(i, a); });
+      simTimeEl.textContent = data.simTime.toFixed(1) + 's';
+      sensorEl.textContent = data.sensor + ' / 1023';
+      ffDot.classList.toggle('live', !!data.formfindConnected);
+      ffState.textContent = data.formfindConnected ? 'connected' : 'not connected';
+    };
+    ws.onclose = () => {
+      dashDot.classList.remove('live'); dashState.textContent = 'disconnected'; note.style.display = 'block';
+      setTimeout(connect, 1500);
+    };
+    ws.onerror = () => ws.close();
+  }
+  connect();
+})();
+</script>
+</body>
+</html>`;
+}
+
 console.log(`FORMFIND avr8js simulator bridge`);
 console.log(`  Firmware: ${HEX_PATH}`);
 console.log(`  Sensor mode: ${sensorMode}${sensorMode === 'fixed' ? ` (${sensorFixed})` : ''}`);
 console.log(`  Listening on ws://localhost:${WS_PORT}`);
-console.log(`  In FORMFIND's Physical Rig panel: "Connect via Wokwi Bridge" (URL already defaults to this port).`);
+console.log(`  In FORMFIND's Physical Rig panel: "Connect via Simulator Bridge" (URL already defaults to this port).`);
+if (DASHBOARD_ENABLED) {
+  console.log(`  Live visual dashboard: http://localhost:${DASHBOARD_PORT} (open this in a browser tab to watch the arms move)`);
+} else {
+  console.log(`  Dashboard disabled (--no-dashboard).`);
+}
 console.log(`  Ctrl+C to stop.`);
 
 setInterval(() => {
@@ -248,6 +448,8 @@ setInterval(() => {
 process.on('SIGINT', () => {
   clearInterval(tickTimer);
   wss.close();
+  if (httpServer) httpServer.close();
+  if (dashboardWss) dashboardWss.close();
   console.log('\nStopped.');
   process.exit(0);
 });
