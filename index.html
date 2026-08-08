@@ -166,7 +166,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.23.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.24.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -222,9 +222,9 @@ function showHelp(){
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of popsicle-stick figures, each with one arm swinging on a servo, in elevation like the real piece, with a side/angled view toggle. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each figure's angle measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of glowing energy emitters, each bursting particles whose speed and size are driven by that servo's real angle, with a side/angled view toggle. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each emitter's burst measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — popsicle-stick figures, each with one arm swinging on a servo. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each figure's angle is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — a row of glowing energy emitters, each bursting particles driven by that servo's real angle. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each emitter's burst is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -1030,38 +1030,38 @@ function computeServoAngles(){
 
 const HW_SERVO_SLEW_DEG_PER_SEC = 300; // ~a typical standard hobby servo's real top speed — the sim can't move faster than hardware could
 
-let hwSim = null; // { THREE, scene, camera, renderer, container, armPivots, count, currentAngles, totalWidth, viewMode }
+let hwSim = null; // { THREE, scene, camera, renderer, container, count, currentAngles, totalWidth, viewMode, emitterEnergy }
 
-// Popsicle-stick-figure rig: each servo drives one figure's arm, swinging it like a wave.
-// Flat "stick" geometry (thin boxes, not round cylinders) for the popsicle-stick look; heads and
-// hand-tips reuse the field's own sphere color as a small callback to the main sphere grid.
-const HW_LEG_LEN = 0.42, HW_ARM_LEN = 0.46, HW_TORSO_LEN = 0.6, HW_HIP_Y = 0.45;
-const HW_TRAIL_LAG = [0.30, 0.16, 0.09]; // 3 ghost arms, each lagging further behind the real one — a comet trail, not fake data
-const HW_TRAIL_OPACITY = [0.35, 0.20, 0.10];
+// Row of servo-driven "energy emitters" — one per real firmware pin, arranged like the popsicle-stick
+// figures used to be, but rendered as glowing markers each bursting particles whose speed/size are
+// driven by that channel's real angle deviation-from-neutral plus its real rate-of-change (frame to
+// frame, already slew-rate-limited to ~300°/s like real hardware, so the "how fast" reading is
+// physically real, not synthetic). Matches the visual language introduced in avr8js_sim_bridge.js's
+// standalone dashboard (v1.23.0/1) — glowing ring emitters, additive particle bursts — applied here
+// to the embedded row layout instead of a ring, since the row is what the camera/view-toggle system
+// below is fit to.
+const HW_EMITTER_Y = 0.9; // row sits at this height, particles burst around it
+const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.05; // gentle idle float, purely decorative
+const HW_SPARK_THRESHOLD_DEG = 3; // how close to 0/180 counts as "hit the extreme"
+const HW_SPARK_DURATION = 0.4; // seconds
+const HW_PER_EMITTER_PARTICLES = 34;
 
 function hwPseudoRandom(seed){ // deterministic per-index "randomness" so re-running doesn't reshuffle character variation
   const x = Math.sin(seed * 12.9898) * 43758.5453;
   return x - Math.floor(x);
 }
 
-function hwBuildWoodTexture(THREE){
+function hwSpriteTexture(){
   const c = document.createElement('canvas');
-  c.width = 64; c.height = 64;
+  c.width = c.height = 64;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#E3B77A';
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
-  for(let i = 0; i < 10; i++){
-    const y = (i / 10) * 64 + hwPseudoRandom(i) * 4;
-    ctx.strokeStyle = i % 2 === 0 ? 'rgba(180,130,70,0.35)' : 'rgba(255,220,170,0.3)';
-    ctx.lineWidth = 1 + hwPseudoRandom(i + 50) * 1.5;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    for(let x = 0; x <= 64; x += 8) ctx.lineTo(x, y + Math.sin(x * 0.3 + i) * 2);
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
+  return c;
 }
 
 function ensureHwSimScene(){
@@ -1084,15 +1084,15 @@ function ensureHwSimScene(){
   const n = HW_FIRMWARE_SERVO_COUNT; // always 8 — the on-screen preview mirrors the real compiled sketch's fixed pin count
   const spacing = 1.0;
   const totalWidth = (n - 1) * spacing;
-  const requiredHeight = 1.9; // feet(0) to head-top(~1.3) with margin for the waving arm's swing
-  const requiredWidth = totalWidth + 1.6; // room for arms swung fully horizontal on the end figures
+  const requiredHeight = 2.4; // room for particle bursts above/below the emitter row
+  const requiredWidth = totalWidth + 2.0; // room for bursts on the end emitters
   const aspect = w / h;
 
   // Perspective, not orthographic — reads as genuinely 3D (matches the main kinetic-sculpture
   // stage's own camera) instead of the flat/pancake look an orthographic projection gives a row
-  // of 3D figures. Distance is fit to the content once here and reused for both view modes in
+  // of 3D content. Distance is fit to the content once here and reused for both view modes in
   // setHwSimView, with a margin generous enough that rotating to the angled azimuth doesn't push
-  // anything outside the frustum — that was the actual cause of the angled view clipping figures.
+  // anything outside the frustum.
   const FOV_DEG = 45;
   const vFov = THREE.MathUtils.degToRad(FOV_DEG);
   const distForHeight = (requiredHeight / 2) / Math.tan(vFov / 2);
@@ -1102,8 +1102,8 @@ function ensureHwSimScene(){
 
   const camera = new THREE.PerspectiveCamera(FOV_DEG, aspect, 0.1, 60);
 
-  scene.add(new THREE.AmbientLight(0x8899aa, 0.7));
-  const key = new THREE.DirectionalLight(0xffffff, 1.0);
+  scene.add(new THREE.AmbientLight(0x8899aa, 0.5));
+  const key = new THREE.DirectionalLight(0xffffff, 0.5);
   key.position.set(3, 5, 6);
   scene.add(key);
 
@@ -1112,102 +1112,112 @@ function ensureHwSimScene(){
   renderer.setSize(w, h);
   container.appendChild(renderer.domElement);
 
-  const woodTex = hwBuildWoodTexture(THREE);
-  const legGeo = new THREE.BoxGeometry(0.05, HW_LEG_LEN, 0.02);
-  legGeo.translate(0, -HW_LEG_LEN / 2, 0); // pivot at hip end, extends downward
-  const torsoGeo = new THREE.BoxGeometry(0.07, HW_TORSO_LEN, 0.03);
-  torsoGeo.translate(0, HW_TORSO_LEN / 2, 0); // pivot at hip end, extends upward
-  const armGeo = new THREE.BoxGeometry(0.045, HW_ARM_LEN, 0.02);
-  armGeo.translate(0, -HW_ARM_LEN / 2, 0); // pivot at shoulder end, hangs downward by default
-  const groundGeo = new THREE.CircleGeometry(0.22, 16);
-  groundGeo.rotateX(-Math.PI / 2);
+  // ground glow strip, purely a visual anchor for the row (subtle, not data-driven)
+  const stripGeo = new THREE.PlaneGeometry(totalWidth + 2.2, 0.4);
+  const stripMat = new THREE.MeshBasicMaterial({ color: 0x131519, transparent: true, opacity: 0.6 });
+  const strip = new THREE.Mesh(stripGeo, stripMat);
+  strip.rotation.x = -Math.PI / 2;
+  strip.position.set(0, 0.01, 0);
+  scene.add(strip);
 
-  const armPivots = [], figureGroups = [], legLefts = [], legRights = [], restingArms = [];
-  const headMats = [], handMats = [], headMeshes = [], handMeshes = [];
-  const trailArms = []; // [figureIndex][trailIndex] -> mesh
-  const trailAngles = []; // [figureIndex] -> Float32Array(3), lagged rotation state
-  const LEG_BASE_DEG = 16, REST_ARM_BASE_DEG = -12;
+  const spriteTex = new THREE.CanvasTexture(hwSpriteTexture());
 
+  const emitterPositions = [];
+  const emitterMarkers = [];
+  const markerMats = [];
   for(let i = 0; i < n; i++){
     const x = i * spacing - totalWidth / 2;
-    const rnd = hwPseudoRandom(i * 7.3); // 0..1, deterministic per figure — a little individuality, not noise every frame
-    const scale = 0.9 + rnd * 0.22; // slightly different builds per figure
-    const hueShift = (rnd - 0.5) * 0.06;
-
-    const figure = new THREE.Group();
-    figure.position.set(x, HW_HIP_Y, 0);
-    figure.scale.setScalar(scale);
-    scene.add(figure);
-
-    const stickMat = new THREE.MeshStandardMaterial({ color: 0xE3B77A, metalness: 0.05, roughness: 0.85, map: woodTex });
-    stickMat.color.offsetHSL(hueShift, 0, 0); // per-figure so the row reads as individuals, not clones
-
-    const ground = new THREE.Mesh(groundGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }));
-    ground.position.set(0, 0.005, 0);
-    figure.add(ground);
-
-    const legLeft = new THREE.Mesh(legGeo, stickMat);
-    legLeft.rotation.z = THREE.MathUtils.degToRad(LEG_BASE_DEG);
-    figure.add(legLeft);
-    const legRight = new THREE.Mesh(legGeo, stickMat);
-    legRight.rotation.z = THREE.MathUtils.degToRad(-LEG_BASE_DEG);
-    figure.add(legRight);
-
-    const torso = new THREE.Mesh(torsoGeo, stickMat);
-    figure.add(torso);
-
-    // head/hand glow is driven by this figure's own real angle deviation from neutral — real data, not decorative
-    const headMat = new THREE.MeshStandardMaterial({ color: BASE_SPHERE_COLOR, metalness: 0.85, roughness: 0.28, emissive: BASE_SPHERE_COLOR, emissiveIntensity: 0 });
-    const handMat = headMat.clone();
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13 * (0.92 + rnd * 0.16), 14, 10), headMat);
-    head.position.set(0, HW_TORSO_LEN + 0.16, 0);
-    figure.add(head);
-
-    const restingArm = new THREE.Mesh(armGeo, stickMat); // idle-swaying, not servo-driven — just a two-armed silhouette
-    restingArm.position.set(0, HW_TORSO_LEN, 0);
-    restingArm.rotation.z = THREE.MathUtils.degToRad(REST_ARM_BASE_DEG);
-    figure.add(restingArm);
-
-    const pivot = new THREE.Group(); // the servo-driven arm — this one's rotation is the only thing derived from real data
-    pivot.position.set(0, HW_TORSO_LEN, 0);
-    figure.add(pivot);
-    const drivenArm = new THREE.Mesh(armGeo, stickMat);
-    pivot.add(drivenArm);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 8), handMat);
-    hand.position.set(0, -HW_ARM_LEN, 0);
-    pivot.add(hand);
-
-    // trailing ghost arms — a fading comet trail behind the real arm's recent motion
-    const ghostMat = new THREE.MeshBasicMaterial({ color: 0xE3B77A, transparent: true });
-    const figureTrails = [];
-    for(let g = 0; g < HW_TRAIL_LAG.length; g++){
-      const gPivot = new THREE.Group();
-      gPivot.position.set(0, HW_TORSO_LEN, 0);
-      figure.add(gPivot);
-      const gArm = new THREE.Mesh(armGeo, ghostMat.clone());
-      gArm.material.opacity = HW_TRAIL_OPACITY[g];
-      gPivot.add(gArm);
-      figureTrails.push(gPivot);
-    }
-
-    armPivots.push(pivot);
-    figureGroups.push(figure);
-    legLefts.push(legLeft);
-    legRights.push(legRight);
-    restingArms.push(restingArm);
-    headMats.push(headMat);
-    handMats.push(handMat);
-    trailArms.push(figureTrails);
-    trailAngles.push(new Float32Array(HW_TRAIL_LAG.length).fill(90));
+    emitterPositions.push(new THREE.Vector3(x, HW_EMITTER_Y, 0));
+    const rnd = hwPseudoRandom(i * 7.3); // 0..1, deterministic per emitter — individuality, not per-frame noise
+    const markerColor = new THREE.Color(BASE_SPHERE_COLOR).offsetHSL((rnd - 0.5) * 0.08, 0, 0);
+    const markerMat = new THREE.MeshStandardMaterial({ color: markerColor, metalness: 0.8, roughness: 0.3, emissive: markerColor, emissiveIntensity: 0 });
+    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.14 * (0.92 + rnd * 0.16), 16, 12), markerMat);
+    marker.position.copy(emitterPositions[i]);
+    scene.add(marker);
+    emitterMarkers.push(marker);
+    markerMats.push(markerMat);
   }
+
+  // Particle burst system — additive sprites, custom shader for per-particle size (see
+  // avr8js_sim_bridge.js's dashboard for the same technique; safe to use a plain template-literal
+  // shader string here since, unlike that file, this code isn't itself embedded inside an outer
+  // template literal — no double-escaping risk).
+  const total = n * HW_PER_EMITTER_PARTICLES;
+  const positions = new Float32Array(total * 3);
+  const colorsAttr = new Float32Array(total * 3);
+  const sizesAttr = new Float32Array(total);
+  const pVel = [];
+  const pAge = new Float32Array(total);
+  const pLife = new Float32Array(total);
+  const pEmitter = new Uint16Array(total);
+
+  function hueForEmitter(i){ return 0.52 + (i / n) * 0.32; }
+
+  function respawnParticle(p, energy){
+    const e = pEmitter[p];
+    const origin = emitterPositions[e];
+    positions[p * 3] = origin.x;
+    positions[p * 3 + 1] = origin.y;
+    positions[p * 3 + 2] = origin.z;
+    const dir = new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.2) * 1.6, (Math.random() - 0.5)).normalize();
+    const speed = 0.55 + energy * 2.4 + Math.random() * 0.3;
+    pVel[p] = dir.multiplyScalar(speed);
+    pAge[p] = 0;
+    pLife[p] = 0.45 + Math.random() * 0.75;
+    sizesAttr[p] = 0;
+  }
+
+  for(let p = 0; p < total; p++){
+    pEmitter[p] = Math.floor(p / HW_PER_EMITTER_PARTICLES);
+    const c = new THREE.Color().setHSL(hueForEmitter(pEmitter[p]), 0.85, 0.62);
+    colorsAttr[p * 3] = c.r; colorsAttr[p * 3 + 1] = c.g; colorsAttr[p * 3 + 2] = c.b;
+    respawnParticle(p, 0);
+    pAge[p] = Math.random() * pLife[p]; // desync initial bursts
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colorsAttr, 3));
+  geo.setAttribute('size', new THREE.BufferAttribute(sizesAttr, 1));
+
+  const particleMat = new THREE.ShaderMaterial({
+    uniforms: { map: { value: spriteTex } },
+    vertexShader: `
+      attribute float size;
+      attribute vec3 color;
+      varying vec3 vColor;
+      void main(){
+        vColor = color;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * (260.0 / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      precision mediump float;
+      uniform sampler2D map;
+      varying vec3 vColor;
+      void main(){
+        vec4 tex = texture2D(map, gl_PointCoord);
+        gl_FragColor = vec4(vColor, 1.0) * tex;
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const points = new THREE.Points(geo, particleMat);
+  scene.add(points);
 
   const prevAngles = hwSim ? hwSim.currentAngles : null;
   const currentAngles = new Float32Array(n).fill(90);
   if(prevAngles) currentAngles.set(prevAngles.subarray(0, Math.min(n, prevAngles.length)));
 
   hwSim = {
-    THREE, scene, camera, renderer, container, armPivots, figureGroups, legLefts, legRights, restingArms,
-    headMats, handMats, trailArms, trailAngles, fitDist,
+    THREE, scene, camera, renderer, container, fitDist,
+    emitterMarkers, markerMats, emitterPositions,
+    positions, colorsAttr, sizesAttr, pVel, pAge, pLife, pEmitter, respawnParticle, geo, points,
+    emitterEnergy: new Float32Array(n),
     sparkT: new Float32Array(n).fill(-1), // -1 = not currently sparking
     count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side'),
   };
@@ -1230,18 +1240,6 @@ function setHwSimView(mode){
   const btn = document.getElementById('hwSimViewBtn');
   if(btn) btn.textContent = mode === 'angle' ? 'Side view' : 'Angled view';
 }
-
-// Idle secondary motion — a gentle bob/sway/leg-shift, phase-offset per figure for a wave effect
-// across the row. Purely decorative (driven by elapsed time, not by any servo data) so the
-// figures read as "alive" even when the driven arm itself is sitting near neutral; the driven
-// arm's own rotation (below) is the only part of this animation tied to real angle data.
-// When a real bridge is actually connected (hardwareEngine.connected), the idle motion picks up —
-// real data, since it reflects whether this preview is standing in for actual hardware right now.
-const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.035;
-const HW_IDLE_LEG_HZ = 0.55, HW_IDLE_LEG_AMPLITUDE_DEG = 5;
-const HW_IDLE_REST_ARM_HZ = 0.35, HW_IDLE_REST_ARM_AMPLITUDE_DEG = 9;
-const HW_SPARK_THRESHOLD_DEG = 3; // how close to 0/180 counts as "hit the extreme"
-const HW_SPARK_DURATION = 0.4; // seconds
 
 function updateHwSimulator(now, dt){
   if(!hardwareEngine.simulate) return;
@@ -1272,9 +1270,10 @@ function updateHwSimulator(now, dt){
   const moodMul = hardwareEngine.connected ? 1.4 : 1.0; // perk up when an actual rig/bridge is connected
   const tSec = now / 1000;
   // Real beat-onset signal, already computed for the main field's shimmer (audioEngine.beatPulse) —
-  // reused here for a synchronized hop across the whole row on every detected beat. Only active
+  // reused here as a shared burst boost across every emitter on every detected beat. Only active
   // in Audio mode; 0 otherwise, so it never fakes motion when there's no real beat to react to.
   const beat = (engine.mode === 'audio') ? audioEngine.beatPulse : 0;
+
   for(let i = 0; i < hwSim.count; i++){
     const cur = hwSim.currentAngles[i];
     const tgt = target[i] !== undefined ? target[i] : 90;
@@ -1282,49 +1281,55 @@ function updateHwSimulator(now, dt){
     const prevAngle = cur;
     hwSim.currentAngles[i] = cur + step;
     const angle = hwSim.currentAngles[i];
-    hwSim.armPivots[i].rotation.z = hwSim.THREE.MathUtils.degToRad(angle - 90); // the one real-data-driven rotation
 
-    // Trailing ghost arms — first-order lag toward the real angle, each slower than the last
-    const trail = hwSim.trailAngles[i];
-    for(let g = 0; g < trail.length; g++){
-      trail[g] += (angle - trail[g]) * HW_TRAIL_LAG[g];
-      hwSim.trailArms[i][g].rotation.z = hwSim.THREE.MathUtils.degToRad(trail[g] - 90);
-    }
-
-    // Head/hand glow — intensity driven by this figure's own angle deviation from neutral (real data)
+    // Energy = how displaced from neutral + how fast this channel is actually moving right now
+    // (the slew-limited per-frame delta is a real, physically-bounded rate — same discipline as
+    // the standalone dashboard's angle-deviation-plus-rate-of-change measure).
     const deviation = Math.abs(angle - 90) / 90; // 0..1
-    hwSim.headMats[i].emissiveIntensity = deviation * 0.9;
-    hwSim.handMats[i].emissiveIntensity = deviation * 0.9;
+    const delta = Math.abs(step) / maxStep; // 0..1, how close to max real servo speed this frame
+    const instant = Math.min(1, deviation * 0.5 + delta * 1.6 + beat * 0.6);
+    hwSim.emitterEnergy[i] = hwSim.emitterEnergy[i] * 0.75 + instant * 0.25;
 
-    // Milestone spark when a figure actually reaches a real extreme (0° or 180°)
+    // Milestone spark when a channel actually reaches a real extreme (0° or 180°)
     const nearExtreme = angle < HW_SPARK_THRESHOLD_DEG || angle > 180 - HW_SPARK_THRESHOLD_DEG;
     const wasNearExtreme = prevAngle < HW_SPARK_THRESHOLD_DEG || prevAngle > 180 - HW_SPARK_THRESHOLD_DEG;
     if(nearExtreme && !wasNearExtreme) hwSim.sparkT[i] = 0;
+    let flash = 0;
     if(hwSim.sparkT[i] >= 0){
       hwSim.sparkT[i] += dt;
       const p = hwSim.sparkT[i] / HW_SPARK_DURATION;
-      if(p >= 1){
-        hwSim.sparkT[i] = -1;
-        hwSim.handMats[i].emissiveIntensity = deviation * 0.9;
-      } else {
-        const flash = 1 - p;
-        hwSim.handMats[i].emissiveIntensity = Math.max(deviation * 0.9, flash * 2.2);
-      }
+      if(p >= 1) hwSim.sparkT[i] = -1;
+      else flash = 1 - p;
     }
 
-    // Idle secondary motion, phase-offset per figure so the row reads as a wave, not a lockstep twitch
-    const phase = i * 0.5;
-    const bob = Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + phase) * HW_IDLE_BOB_AMPLITUDE * moodMul;
-    const beatHop = beat * 0.12; // real beat onset — every figure hops together, on the actual beat
-    hwSim.figureGroups[i].position.y = HW_HIP_Y + bob + beatHop;
-    const legSwing = Math.sin(tSec * HW_IDLE_LEG_HZ * Math.PI * 2 + phase) * HW_IDLE_LEG_AMPLITUDE_DEG * moodMul;
-    hwSim.legLefts[i].rotation.z = hwSim.THREE.MathUtils.degToRad(16 + legSwing);
-    hwSim.legRights[i].rotation.z = hwSim.THREE.MathUtils.degToRad(-16 - legSwing);
-    const restSwing = Math.sin(tSec * HW_IDLE_REST_ARM_HZ * Math.PI * 2 + phase * 1.3) * HW_IDLE_REST_ARM_AMPLITUDE_DEG * moodMul;
-    hwSim.restingArms[i].rotation.z = hwSim.THREE.MathUtils.degToRad(-12 + restSwing);
+    const energy = Math.min(1, hwSim.emitterEnergy[i] * moodMul + flash * 0.8);
+
+    // Marker glow + gentle idle float — real-data brightness, decorative float
+    hwSim.markerMats[i].emissiveIntensity = deviation * 1.1 + flash * 2.0;
+    const bob = Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + i * 0.5) * HW_IDLE_BOB_AMPLITUDE;
+    hwSim.emitterMarkers[i].position.y = HW_EMITTER_Y + bob;
+    hwSim.emitterMarkers[i].scale.setScalar(1 + energy * 0.6);
+    hwSim.emitterPositions[i].y = hwSim.emitterMarkers[i].position.y; // particles spawn from the same bobbing point
+
+    // Continuous respawn scaled by this channel's energy — always some drift even idle, never a
+    // fully dead marker (same "no dead zone" principle as the main app's turbulence/speed fix).
+    for(let p = i * HW_PER_EMITTER_PARTICLES; p < (i + 1) * HW_PER_EMITTER_PARTICLES; p++){
+      hwSim.pAge[p] += dt;
+      if(hwSim.pAge[p] >= hwSim.pLife[p]) hwSim.respawnParticle(p, energy);
+      const lifeT = hwSim.pAge[p] / hwSim.pLife[p];
+      hwSim.positions[p * 3] += hwSim.pVel[p].x * dt;
+      hwSim.positions[p * 3 + 1] += hwSim.pVel[p].y * dt;
+      hwSim.positions[p * 3 + 2] += hwSim.pVel[p].z * dt;
+      const fade = Math.sin(Math.min(1, lifeT) * Math.PI);
+      hwSim.sizesAttr[p] = (1.4 + energy * 3.4) * fade;
+    }
   }
+  hwSim.geo.attributes.position.needsUpdate = true;
+  hwSim.geo.attributes.size.needsUpdate = true;
+
   hwSim.renderer.render(hwSim.scene, hwSim.camera);
 }
+
 
 function initAudioContext(){
   if(audioEngine.ctx) return;
