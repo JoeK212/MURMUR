@@ -353,7 +353,17 @@ var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 0.35;
+// v1.28.0's halving still wasn't enough under real, dense audio (many/most channels energetic
+// simultaneously, arcs overlapping into one mass) — this isn't really a single-knob problem:
+// additive stacking of enough overlapping sprites trends toward white under ANY tone-mapping
+// curve as local luminance climbs, exposure just shifts where that happens. Cut hard across
+// every contributing layer this time instead of nudging one (same fix applied to the embedded
+// preview, matched here for parity).
+// (Originally tuned against lead particles alone; v1.27.0 then stacked trail echoes and a
+// reflection pass on top of the existing bloom, each individually modest but additively
+// re-blowing out to white together — pulled exposure/bloom/trail/reflection down to budget
+// for the combined total, same fix applied to the embedded preview.)
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 var scene = new THREE.Scene();
@@ -398,39 +408,82 @@ rig.add(core);
 var coreLight = new THREE.PointLight(0x38BDF8, 3, 45, 2);
 rig.add(coreLight);
 
-// ---------- per-servo emitters, arranged on a ring ----------
+// ---------- per-servo launch canisters, arranged on a ring around the core ----------
 var RING_RADIUS = 9.5;
+var CANISTER_H = 0.5; // taller than the embedded preview's row version — this scene reads at a bigger scale
 var emitterPositions = [];
 for (var i = 0; i < NUM; i++) {
   var theta2 = (i / NUM) * Math.PI * 2;
-  emitterPositions.push(new THREE.Vector3(Math.cos(theta2) * RING_RADIUS, 0, Math.sin(theta2) * RING_RADIUS));
+  emitterPositions.push(new THREE.Vector3(Math.cos(theta2) * RING_RADIUS, CANISTER_H, Math.sin(theta2) * RING_RADIUS));
 }
 
 function hueForEmitter(i) { return 0.52 + (i / NUM) * 0.32; } // cyan -> violet band
 
-// small glow marker per emitter, brightens with that channel's real energy
-var emitterMarkers = [];
+// ground disc — grounds the ring the same way the embedded preview's canister row sits in a
+// strip; the whole thing still rotates with 'rig', so it reads as a rotating platform
+var groundGeo = new THREE.CircleGeometry(RING_RADIUS + 2, 40);
+var groundMat = new THREE.MeshBasicMaterial({ color: 0x0d0e11, transparent: true, opacity: 0.7 });
+var ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.01;
+rig.add(ground);
+
+// launch canisters — dark tubes sunk into the ring, topped with a glowing opening ring that
+// brightens with that channel's real energy (same real-data role the old floating sphere
+// marker played, just physically grounded now)
+var canisterGeo = new THREE.CylinderGeometry(0.32, 0.4, CANISTER_H, 16);
+canisterGeo.translate(0, CANISTER_H / 2, 0);
+var canisterMat = new THREE.MeshBasicMaterial({ color: 0x15171b });
+var voidGeo = new THREE.CircleGeometry(0.24, 18);
+var voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+var ringGeo = new THREE.RingGeometry(0.2, 0.34, 24);
+
+var emitterMarkers = []; // the glowing opening ring per canister
 for (var m = 0; m < NUM; m++) {
+  var pos = emitterPositions[m];
+  var canister = new THREE.Mesh(canisterGeo, canisterMat);
+  canister.position.set(pos.x, 0, pos.z);
+  rig.add(canister);
+
+  var voidDisc = new THREE.Mesh(voidGeo, voidMat);
+  voidDisc.rotation.x = -Math.PI / 2;
+  voidDisc.position.set(pos.x, CANISTER_H - 0.08, pos.z);
+  rig.add(voidDisc);
+
   var markerColor = new THREE.Color().setHSL(hueForEmitter(m), 0.8, 0.62);
-  var markerGeo = new THREE.SphereGeometry(0.22, 12, 12);
-  var markerMat = new THREE.MeshBasicMaterial({ color: markerColor, transparent: true, opacity: 0.85 });
-  var marker = new THREE.Mesh(markerGeo, markerMat);
-  marker.position.copy(emitterPositions[m]);
+  var markerMat = new THREE.MeshBasicMaterial({ color: markerColor, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+  var marker = new THREE.Mesh(ringGeo, markerMat);
+  marker.rotation.x = -Math.PI / 2;
+  marker.position.set(pos.x, CANISTER_H + 0.015, pos.z);
   rig.add(marker);
   emitterMarkers.push(marker);
 }
 
 // ---------- particle burst system, additive sprites, custom shader for per-particle size ----------
-var PER_EMITTER = 46;
+// Buffer layout: indices [0, TOTAL) are real, physically-simulated "lead" particles. Indices
+// [TOTAL, TOTAL*(1+TRAIL_LAG.length)) are comet-tail echoes — not independently simulated, they
+// just ease toward their lead's current position each frame (see animate()), so the trail is a
+// smoothed rendering of the same real launch, not a second data source. Same technique as
+// FORMFIND's own embedded preview (index.html's hwSim), applied here for visual parity.
+var PER_EMITTER = 20;
 var TOTAL = NUM * PER_EMITTER;
-var positions = new Float32Array(TOTAL * 3);
-var colorsAttr = new Float32Array(TOTAL * 3);
-var sizesAttr = new Float32Array(TOTAL);
+var TRAIL_LAG = [0.34, 0.16];
+var TRAIL_SCALE = [0.32, 0.14];
+var TRAIL_COUNT = TRAIL_LAG.length;
+var TOTAL_ALL = TOTAL * (1 + TRAIL_COUNT);
+var GRAVITY = 3.4; // pulls launches into a real ballistic arc instead of a radial burst
+var POP_DURATION = 0.18; // seconds — brief flash + outward kick when a particle crosses its own apex
+
+var positions = new Float32Array(TOTAL_ALL * 3);
+var colorsAttr = new Float32Array(TOTAL_ALL * 3);
+var sizesAttr = new Float32Array(TOTAL_ALL);
 
 var pVel = [];
 var pAge = new Float32Array(TOTAL);
 var pLife = new Float32Array(TOTAL);
 var pEmitter = new Uint16Array(TOTAL);
+var pWasRising = new Uint8Array(TOTAL); pWasRising.fill(1);
+var pPopT = new Float32Array(TOTAL); pPopT.fill(-1);
 var pBaseColor = [];
 
 function spriteTexture() {
@@ -438,8 +491,8 @@ function spriteTexture() {
   cvs.width = cvs.height = 64;
   var ctx = cvs.getContext('2d');
   var g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0, 'rgba(255,255,255,0.42)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.16)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
@@ -453,12 +506,28 @@ function respawnParticle(p, energy) {
   positions[p * 3] = origin.x;
   positions[p * 3 + 1] = origin.y;
   positions[p * 3 + 2] = origin.z;
-  var dir = new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.25) * 1.6, (Math.random() - 0.5)).normalize();
-  var speed = 2.6 + energy * 9.5 + Math.random() * 1.2; // higher baseline + wider energy range so bursts read clearly, not just shimmer
-  pVel[p] = dir.multiplyScalar(speed);
+  // Launch mostly straight up out of the canister mouth, like a mortar shot — energy sets how
+  // hard it fires, gravity (applied per-frame in animate()) bends the flight into a real arc
+  // instead of a radial burst. Small lateral scatter so it isn't a single ruler-straight line.
+  var spread = 0.4 + energy * 0.9;
+  var vx = (Math.random() - 0.5) * spread;
+  var vz = (Math.random() - 0.5) * spread;
+  var vy = 2.4 + energy * 6.5 + Math.random() * 0.6;
+  pVel[p] = new THREE.Vector3(vx, vy, vz);
   pAge[p] = 0;
-  pLife[p] = 0.45 + Math.random() * 0.75; // shorter life so fast-moving particles read as a burst arc, not a slow drift
+  pLife[p] = 0.7 + Math.random() * 1.0; // fades mid-arc/near-apex, the way real shell sparks burn out
   sizesAttr[p] = 0;
+  pWasRising[p] = 1;
+  pPopT[p] = -1;
+  // Snap this particle's trail echoes back to the same launch point too, so a respawn doesn't
+  // leave a long streak connecting the old apex to the new launch.
+  for (var k = 0; k < TRAIL_COUNT; k++) {
+    var echoIdx = TOTAL + k * TOTAL + p;
+    positions[echoIdx * 3] = origin.x;
+    positions[echoIdx * 3 + 1] = origin.y;
+    positions[echoIdx * 3 + 2] = origin.z;
+    sizesAttr[echoIdx] = 0;
+  }
 }
 
 for (var p = 0; p < TOTAL; p++) {
@@ -466,6 +535,10 @@ for (var p = 0; p < TOTAL; p++) {
   var c = new THREE.Color().setHSL(hueForEmitter(pEmitter[p]), 0.85, 0.62);
   pBaseColor.push(c);
   colorsAttr[p * 3] = c.r; colorsAttr[p * 3 + 1] = c.g; colorsAttr[p * 3 + 2] = c.b;
+  for (var k2 = 0; k2 < TRAIL_COUNT; k2++) {
+    var echoIdx2 = TOTAL + k2 * TOTAL + p;
+    colorsAttr[echoIdx2 * 3] = c.r; colorsAttr[echoIdx2 * 3 + 1] = c.g; colorsAttr[echoIdx2 * 3 + 2] = c.b;
+  }
   respawnParticle(p, 0);
   pAge[p] = Math.random() * pLife[p]; // desync initial bursts so they don't all fire in unison
 }
@@ -476,7 +549,7 @@ geo.setAttribute('color', new THREE.BufferAttribute(colorsAttr, 3));
 geo.setAttribute('size', new THREE.BufferAttribute(sizesAttr, 1));
 
 var particleMat = new THREE.ShaderMaterial({
-  uniforms: { map: { value: spriteTex } },
+  uniforms: { map: { value: spriteTex }, dim: { value: 1.0 } },
   vertexShader: [
     'attribute float size;',
     'attribute vec3 color;',
@@ -484,17 +557,18 @@ var particleMat = new THREE.ShaderMaterial({
     'void main(){',
     '  vColor = color;',
     '  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
-    '  gl_PointSize = size * (420.0 / -mvPosition.z);',
+    '  gl_PointSize = size * (300.0 / -mvPosition.z);',
     '  gl_Position = projectionMatrix * mvPosition;',
     '}'
   ].join(' '),
   fragmentShader: [
     'precision mediump float;',
     'uniform sampler2D map;',
+    'uniform float dim;',
     'varying vec3 vColor;',
     'void main(){',
     '  vec4 tex = texture2D(map, gl_PointCoord);',
-    '  gl_FragColor = vec4(vColor, 1.0) * tex;',
+    '  gl_FragColor = vec4(vColor, 1.0) * tex * dim;',
     '}'
   ].join(' '),
   transparent: true,
@@ -503,6 +577,17 @@ var particleMat = new THREE.ShaderMaterial({
 });
 var points = new THREE.Points(geo, particleMat);
 rig.add(points);
+
+// Ground reflection — a second Points object sharing the exact same BufferGeometry (zero extra
+// CPU cost, one more GPU draw call), mirrored across the ring's ground plane (y=0) and dimmed.
+// Sparks/trails only, not the canister meshes — kept cheap. Added to 'rig' (not 'scene') so it
+// rotates together with everything else, which stays correct since a y=0 mirror commutes with
+// rotation about the Y axis.
+var reflMat = particleMat.clone();
+reflMat.uniforms = { map: { value: spriteTex }, dim: { value: 0.08 } };
+var reflPoints = new THREE.Points(geo, reflMat);
+reflPoints.scale.y = -1;
+rig.add(reflPoints);
 
 // ---------- live data state ----------
 var angleEnergy = new Float32Array(NUM);   // smoothed 0..1 "how alive" each channel is right now
@@ -578,22 +663,54 @@ function animate() {
   }
 
   // particles: continuous respawn scaled by that channel's energy — always some drift even idle,
-  // never fully dead, same "no dead zone on the slider" principle as the main app's turbulence fix
+  // never fully dead, same "no dead zone on the slider" principle as the main app's turbulence fix.
+  // Gravity bends each launch into a real ballistic arc; apex bursts give it a shell-pop kick.
   var posAttr = geo.attributes.position;
   var sizeAttr = geo.attributes.size;
   for (var p = 0; p < TOTAL; p++) {
     pAge[p] += dt;
+    var energyHere = angleEnergy[pEmitter[p]] * connectedSmooth;
     if (pAge[p] >= pLife[p]) {
-      respawnParticle(p, angleEnergy[pEmitter[p]] * connectedSmooth);
+      respawnParticle(p, energyHere);
     }
     var lifeT = pAge[p] / pLife[p]; // 0..1
+    pVel[p].y -= GRAVITY * dt;
+
+    var rising = pVel[p].y > 0;
+    if (pWasRising[p] && !rising) {
+      pPopT[p] = 0;
+      var kick = 0.6 + energyHere * 1.3;
+      pVel[p].x += (Math.random() - 0.5) * kick;
+      pVel[p].z += (Math.random() - 0.5) * kick;
+    }
+    pWasRising[p] = rising ? 1 : 0;
+    var popFlash = 0;
+    if (pPopT[p] >= 0) {
+      pPopT[p] += dt;
+      var pp = pPopT[p] / POP_DURATION;
+      if (pp >= 1) pPopT[p] = -1; else popFlash = 1 - pp;
+    }
+
     positions[p * 3] += pVel[p].x * dt;
     positions[p * 3 + 1] += pVel[p].y * dt;
     positions[p * 3 + 2] += pVel[p].z * dt;
     var fade = Math.sin(Math.min(1, lifeT) * Math.PI); // ramps up then back down over its life
-    var energyHere = angleEnergy[pEmitter[p]] * connectedSmooth;
-    sizesAttr[p] = (2.2 + energyHere * 6.5) * fade;
+    sizesAttr[p] = (1.6 + energyHere * 4.6) * fade + popFlash * 3.0;
   }
+
+  // Trail echoes — a cheap comet tail: each echo eases toward its lead particle's current
+  // position (just written above) with its own lag, no independent physics of its own.
+  for (var k3 = 0; k3 < TRAIL_COUNT; k3++) {
+    var lag = TRAIL_LAG[k3], tscale = TRAIL_SCALE[k3];
+    for (var p2 = 0; p2 < TOTAL; p2++) {
+      var echoIdx3 = TOTAL + k3 * TOTAL + p2;
+      positions[echoIdx3 * 3]     += (positions[p2 * 3]     - positions[echoIdx3 * 3])     * lag;
+      positions[echoIdx3 * 3 + 1] += (positions[p2 * 3 + 1] - positions[echoIdx3 * 3 + 1]) * lag;
+      positions[echoIdx3 * 3 + 2] += (positions[p2 * 3 + 2] - positions[echoIdx3 * 3 + 2]) * lag;
+      sizesAttr[echoIdx3] = sizesAttr[p2] * tscale;
+    }
+  }
+
   posAttr.needsUpdate = true;
   sizeAttr.needsUpdate = true;
 
@@ -607,7 +724,7 @@ function animate() {
   // slow cinematic orbit, speeds up a little with overall energy — never stops
   rig.rotation.y += dt * (0.045 + avgEnergy * 0.09) * (0.4 + connectedSmooth * 0.6);
 
-  bloomPass.strength = (0.9 + avgEnergy * 1.6 + sensorSmooth * 0.6) * (0.35 + connectedSmooth * 0.65);
+  bloomPass.strength = (0.25 + avgEnergy * 0.45 + sensorSmooth * 0.18) * (0.35 + connectedSmooth * 0.65);
 
   composer.render();
 }
