@@ -84,13 +84,9 @@
     border:1px solid var(--line); border-radius:10px; overflow:hidden; touch-action:none;
   }
   #stage canvas{display:block; width:100%; height:100%;}
-  #stageHint{
-    position:absolute; left:12px; bottom:10px; font-size:11px; color:var(--ink-soft);
-    font-family:var(--font-ui); letter-spacing:0.03em; pointer-events:none;
-    background:rgba(6,7,8,0.55); padding:4px 8px; border-radius:5px;
-  }
   #stageViewControls{
-    position:absolute; right:10px; top:10px; display:flex; gap:6px; z-index:2;
+    position:absolute; right:10px; top:10px; display:flex; flex-wrap:wrap;
+    justify-content:flex-end; gap:6px; max-width:calc(100% - 20px); z-index:2;
   }
   #stageViewControls button{
     background:rgba(6,7,8,0.65); border:1px solid var(--line); color:var(--ink-soft);
@@ -98,6 +94,29 @@
     border-radius:6px; cursor:pointer; transition:background 120ms, color 120ms;
   }
   #stageViewControls button:hover{ background:rgba(20,22,26,0.85); color:var(--ink); }
+  #hwSimViewport{
+    position:relative; overflow:hidden; touch-action:none;
+  }
+  #hwSimViewControls{
+    position:absolute; right:10px; top:10px; display:flex; flex-wrap:wrap;
+    justify-content:flex-end; gap:6px; max-width:calc(100% - 20px); z-index:2;
+  }
+  #hwSimViewControls button{
+    background:rgba(6,7,8,0.65); border:1px solid var(--line); color:var(--ink-soft);
+    font-family:var(--font-ui); font-size:11px; letter-spacing:0.03em; padding:6px 10px;
+    border-radius:6px; cursor:pointer; transition:background 120ms, color 120ms;
+  }
+  #hwSimViewControls button:hover{ background:rgba(20,22,26,0.85); color:var(--ink); }
+
+  #screenGate{
+    position:fixed; inset:0; z-index:9999; background:var(--paper-deep);
+    display:none; align-items:center; justify-content:center; flex-direction:column;
+    text-align:center; padding:24px;
+  }
+  #screenGate h1{ font-family:var(--font-display); font-size:22px; margin:0 0 12px; }
+  #screenGate p{ font-family:var(--font-ui); font-size:14px; color:var(--ink-soft); max-width:320px; line-height:1.6; margin:0 0 20px; }
+  #screenGate .credit{ font-family:var(--font-ui); font-size:12px; color:var(--ink-soft); }
+  #screenGate .credit a{ color:var(--ink-soft); }
 
   .panel{
     margin-top:14px; background:var(--card); border:1px solid var(--line);
@@ -144,9 +163,15 @@
 </head>
 <body>
 
+<div id="screenGate">
+  <h1>FORMFIND</h1>
+  <p>This tool requires a tablet or desktop display. Please open it on a larger screen.</p>
+  <div class="credit">Joe.K · <a href="https://axisbim.io" target="_blank" rel="noopener">axisbim.io</a></div>
+</div>
+
 <header class="top">
   <h1>FORMFIND</h1>
-  <p>714 spheres, one form-finding process</p>
+  <p>968 spheres, one form-finding process — watch it drift into shape and dissolve again</p>
   <button class="btn ghost" id="helpBtn" style="position:absolute; top:calc(14px + env(safe-area-inset-top)); right:14px; padding:6px 10px;">Help</button>
 </header>
 
@@ -166,7 +191,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.25.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.36.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -222,9 +247,9 @@ function showHelp(){
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of launch canisters, each firing particles upward like a firework mortar, launch speed and arc height driven by that servo's real angle, with a side/angled view toggle. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each canister's launch measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of launch canisters, each firing particles upward like a firework mortar, launch speed and arc height driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each canister's launch measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — a row of launch canisters firing particles upward, firework-mortar style, driven by that servo's real angle. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each canister's launch is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" — it has its own panel now, no hardware needed for it — for a 3D preview: a row of launch canisters firing particles upward, firework-mortar style, driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets — same camera controls as the main stage above. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each canister's launch is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -1045,7 +1070,77 @@ const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.015; // tiny idle shimmer
 const HW_GRAVITY = 3.1; // pulls launched particles into a real arc instead of a flat radial burst
 const HW_SPARK_THRESHOLD_DEG = 3; // how close to 0/180 counts as "hit the extreme"
 const HW_SPARK_DURATION = 0.4; // seconds
-const HW_PER_EMITTER_PARTICLES = 22; // fewer particles per emitter — dense overlapping additive sprites were part of what was blowing out to white
+const HW_POP_DURATION = 0.18; // seconds — brief bright flash + outward kick when a particle crosses its own apex, like a shell burst
+const HW_PER_EMITTER_PARTICLES = 15; // cut again in v1.28.1 — dense overlap at real, energetic audio was still blowing out even after dimming each layer
+const HW_TRAIL_LAG = [0.34, 0.16]; // two comet-tail echoes per particle, easing toward its current real position (not independently simulated)
+const HW_TRAIL_SCALE = [0.32, 0.14]; // cut again alongside v1.28.1's bigger exposure reduction — see toneMappingExposure comment
+
+// Bloom postprocessing loads its addon modules asynchronously (same reasoning as the firmware
+// worker below: can't block the render loop waiting on a CDN fetch). Fire off the load once;
+// until it lands, the preview just renders without bloom (same graceful-degrade pattern used
+// everywhere else in this file — never breaks the preview, only enriches it once ready).
+let hwPostFXState = 'idle'; // 'idle' | 'loading' | 'ready' | 'failed'
+let hwPostFXModules = null; // { EffectComposer, RenderPass, UnrealBloomPass }
+function ensureHwPostFX(){
+  if(hwPostFXState !== 'idle') return;
+  hwPostFXState = 'loading';
+  Promise.all([
+    import('three/addons/postprocessing/EffectComposer.js'),
+    import('three/addons/postprocessing/RenderPass.js'),
+    import('three/addons/postprocessing/UnrealBloomPass.js'),
+  ]).then(([composerMod, renderMod, bloomMod]) => {
+    hwPostFXModules = { EffectComposer: composerMod.EffectComposer, RenderPass: renderMod.RenderPass, UnrealBloomPass: bloomMod.UnrealBloomPass };
+    hwPostFXState = 'ready';
+  }).catch((err) => {
+    hwPostFXState = 'failed';
+    console.error('Bloom postprocessing failed to load (falling back to no bloom):', err);
+  });
+}
+function attachHwBloomIfReady(){
+  if(!hwSim || hwSim.composer || hwPostFXState !== 'ready') return;
+  const { EffectComposer, RenderPass, UnrealBloomPass } = hwPostFXModules;
+  const composer = new EffectComposer(hwSim.renderer);
+  composer.addPass(new RenderPass(hwSim.scene, hwSim.camera));
+  const size = hwSim.renderer.getSize(new hwSim.THREE.Vector2());
+  const bloomPass = new UnrealBloomPass(size, 1.0, 0.6, 0.2);
+  composer.addPass(bloomPass);
+  hwSim.composer = composer;
+  hwSim.bloomPass = bloomPass;
+}
+
+// Interactive camera for the embedded preview — same async-load-then-lazy-attach pattern as
+// bloom above, reusing the exact OrbitControls module the main stage already loaded (browsers
+// cache the module fetch, so this is instant once the main stage has loaded it, and still works
+// standalone if this preview somehow initializes first). Replaces v1.27.0's forced always-on
+// camera drift with the same "Auto-rotate" toggle pattern the main stage already uses (engine.autoRotate/
+// autoRotateBtn) — user-reported regression: that forced orbit had no way to be stopped.
+let hwSimAutoRotate = true; // this preview's own auto-rotate state — independent of the main stage's engine.autoRotate
+let hwControlsState = 'idle'; // 'idle' | 'loading' | 'ready' | 'failed'
+let hwOrbitControlsClass = null;
+function ensureHwOrbitControlsModule(){
+  if(hwControlsState !== 'idle') return;
+  hwControlsState = 'loading';
+  import('three/addons/controls/OrbitControls.js').then((mod) => {
+    hwOrbitControlsClass = mod.OrbitControls;
+    hwControlsState = 'ready';
+  }).catch((err) => {
+    hwControlsState = 'failed';
+    console.error('Embedded-preview OrbitControls failed to load (falling back to fixed side/angled views only):', err);
+  });
+}
+function attachHwControlsIfReady(){
+  if(!hwSim || hwSim.controls || hwControlsState !== 'ready') return;
+  const controls = new hwOrbitControlsClass(hwSim.camera, hwSim.renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.autoRotate = hwSimAutoRotate;
+  controls.autoRotateSpeed = 1.1;
+  controls.target.set(0, 1.7, 0); // matches the look-at height setHwSimView already uses
+  controls.minDistance = 2;
+  controls.maxDistance = hwSim.fitDist * 2.5;
+  controls.update();
+  hwSim.controls = controls;
+}
 
 function hwPseudoRandom(seed){ // deterministic per-index "randomness" so re-running doesn't reshuffle character variation
   const x = Math.sin(seed * 12.9898) * 43758.5453;
@@ -1057,8 +1152,8 @@ function hwSpriteTexture(){
   c.width = c.height = 64;
   const ctx = c.getContext('2d');
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,0.85)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.4)');
+  g.addColorStop(0, 'rgba(255,255,255,0.42)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.16)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
@@ -1069,7 +1164,11 @@ function ensureHwSimScene(){
   if(!three || !three.THREE) return false; // main engine not loaded yet
   const container = document.getElementById('hwSimViewport');
   if(!container) return false;
-  if(hwSim && hwSim.count === HW_FIRMWARE_SERVO_COUNT) return true; // always 8 now — mirrors the real compiled sketch, not the "servo count" field (see resampleToFirmwareServoCount)
+  if(hwSim && hwSim.count === HW_FIRMWARE_SERVO_COUNT){
+    attachHwBloomIfReady(); // lazy-attach once the async postprocessing modules land — no-op if already attached or not ready yet
+    attachHwControlsIfReady(); // same for OrbitControls
+    return true; // always 8 now — mirrors the real compiled sketch, not the "servo count" field (see resampleToFirmwareServoCount)
+  }
 
   const THREE = three.THREE;
   if(hwSim){
@@ -1083,7 +1182,7 @@ function ensureHwSimScene(){
   scene.fog = new THREE.Fog(0x060708, 8, 22);
 
   const n = HW_FIRMWARE_SERVO_COUNT; // always 8 — the on-screen preview mirrors the real compiled sketch's fixed pin count
-  const spacing = 1.0;
+  const spacing = 1.6; // more room between canisters so individual launches read as separate, not one fused mass
   const totalWidth = (n - 1) * spacing;
   const requiredHeight = 6.5; // tall enough to frame a full launch-arc-fade arc, not just a strip at ground level
   const requiredWidth = totalWidth + 3.0; // room for lateral scatter on launch
@@ -1107,6 +1206,12 @@ function ensureHwSimScene(){
   const key = new THREE.DirectionalLight(0xffffff, 0.5);
   key.position.set(3, 5, 6);
   scene.add(key);
+  // Warm fill light grazing the ground plane below — same technique the main stage uses to turn
+  // an otherwise-flat dark floor into the soft lit gradient visible under the sphere field, added
+  // here so the two frames read as the same visual world instead of one lit and one pitch-black.
+  const fill = new THREE.PointLight(0xffe8c9, 0.35, 26);
+  fill.position.set(0, -1.5, requiredWidth * 0.35);
+  scene.add(fill);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1116,17 +1221,38 @@ function ensureHwSimScene(){
   // blob instead of distinct colored bursts, worse the busier the audio gets. ACES compresses
   // the highlights instead of hard-clipping, so color survives even where several bursts overlap.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.9;
+  renderer.toneMappingExposure = 0.32;
+  // v1.28.0's halving still wasn't enough under real, dense audio (many/most channels energetic
+  // simultaneously, arcs overlapping into one mass) — this isn't really a single-knob problem:
+  // additive stacking of enough overlapping sprites trends toward white under ANY tone-mapping
+  // curve as local luminance climbs, exposure just shifts where that happens. Cut hard across
+  // every contributing layer this time instead of nudging one.
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
 
-  // ground glow strip, purely a visual anchor for the row (subtle, not data-driven)
-  const stripGeo = new THREE.PlaneGeometry(totalWidth + 2.2, 0.4);
-  const stripMat = new THREE.MeshBasicMaterial({ color: 0x131519, transparent: true, opacity: 0.6 });
-  const strip = new THREE.Mesh(stripGeo, stripMat);
-  strip.rotation.x = -Math.PI / 2;
-  strip.position.set(0, 0.01, 0);
-  scene.add(strip);
+  // Ground plane — was a thin 0.4-unit-deep unlit strip right under the canisters, easy to miss
+  // against the dark background/fog. Replaced with a real floor (same technique the main stage
+  // uses: a big matte MeshStandardMaterial plane, lit rather than a flat unlit color) so it reads
+  // as an actual ground the row sits on, not just a sliver.
+  //
+  // v1.32.0 copied the main stage's exact ground color (0x0a0b0d) verbatim, but the main stage
+  // has no tone mapping at all, while this scene's exposure was cut hard (down to 0.32 across
+  // several rounds) to fix the particle white-blowout — the identical material renders at roughly
+  // a third the brightness here and was effectively invisible (confirmed live via Claude in
+  // Chrome: color alone, even boosted, stayed too dark under these lights). Fixed with a lighter
+  // matte color plus a small emissive term — independent of scene lighting/tone mapping, so it
+  // can't be dragged back down by any future exposure tuning done for the particle system.
+  const groundSize = Math.max(requiredWidth, requiredHeight) * 2.2;
+  const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x14161a, metalness: 0.15, roughness: 0.9,
+    emissive: 0x22262e, emissiveIntensity: 1.0,
+  });
+  groundMat.toneMapped = false;
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.02;
+  scene.add(ground);
 
   // Launch canisters — a short dark tube sunk into the ground strip per servo, with a glowing
   // opening ring at the mouth (the one real-data-driven part: brightness tracks that channel's
@@ -1174,14 +1300,23 @@ function ensureHwSimScene(){
   // avr8js_sim_bridge.js's dashboard for the same technique; safe to use a plain template-literal
   // shader string here since, unlike that file, this code isn't itself embedded inside an outer
   // template literal — no double-escaping risk).
+  //
+  // Buffer layout: indices [0, total) are real, physically-simulated "lead" particles. Indices
+  // [total, total*(1+trailCount)) are comet-tail echoes — not independently simulated, they just
+  // ease toward their lead's current position each frame (see updateHwSimulator), so the trail is
+  // a smoothed rendering of the same real motion, not a second data source.
   const total = n * HW_PER_EMITTER_PARTICLES;
-  const positions = new Float32Array(total * 3);
-  const colorsAttr = new Float32Array(total * 3);
-  const sizesAttr = new Float32Array(total);
+  const trailCount = HW_TRAIL_LAG.length;
+  const totalAll = total * (1 + trailCount);
+  const positions = new Float32Array(totalAll * 3);
+  const colorsAttr = new Float32Array(totalAll * 3);
+  const sizesAttr = new Float32Array(totalAll);
   const pVel = [];
   const pAge = new Float32Array(total);
   const pLife = new Float32Array(total);
   const pEmitter = new Uint16Array(total);
+  const pWasRising = new Uint8Array(total).fill(1); // for apex-burst detection: was this particle still ascending last frame?
+  const pPopT = new Float32Array(total).fill(-1); // -1 = not currently popping; counts up through HW_POP_DURATION once an apex is crossed
 
   function hueForEmitter(i){ return 0.52 + (i / n) * 0.32; }
 
@@ -1202,12 +1337,27 @@ function ensureHwSimScene(){
     pAge[p] = 0;
     pLife[p] = 0.7 + Math.random() * 0.9; // fades mid-arc/near-apex, the way real shell sparks burn out
     sizesAttr[p] = 0;
+    pWasRising[p] = 1;
+    pPopT[p] = -1;
+    // Snap this particle's trail echoes back to the same launch point too, so a respawn doesn't
+    // leave a long streak connecting the old apex to the new launch.
+    for(let k = 0; k < trailCount; k++){
+      const echoIdx = total + k * total + p;
+      positions[echoIdx * 3] = origin.x;
+      positions[echoIdx * 3 + 1] = origin.y;
+      positions[echoIdx * 3 + 2] = origin.z;
+      sizesAttr[echoIdx] = 0;
+    }
   }
 
   for(let p = 0; p < total; p++){
     pEmitter[p] = Math.floor(p / HW_PER_EMITTER_PARTICLES);
     const c = new THREE.Color().setHSL(hueForEmitter(pEmitter[p]), 0.85, 0.62);
     colorsAttr[p * 3] = c.r; colorsAttr[p * 3 + 1] = c.g; colorsAttr[p * 3 + 2] = c.b;
+    for(let k = 0; k < trailCount; k++){
+      const echoIdx = total + k * total + p;
+      colorsAttr[echoIdx * 3] = c.r; colorsAttr[echoIdx * 3 + 1] = c.g; colorsAttr[echoIdx * 3 + 2] = c.b;
+    }
     respawnParticle(p, 0);
     pAge[p] = Math.random() * pLife[p]; // desync initial bursts
   }
@@ -1218,7 +1368,7 @@ function ensureHwSimScene(){
   geo.setAttribute('size', new THREE.BufferAttribute(sizesAttr, 1));
 
   const particleMat = new THREE.ShaderMaterial({
-    uniforms: { map: { value: spriteTex } },
+    uniforms: { map: { value: spriteTex }, dim: { value: 1.0 } },
     vertexShader: `
       attribute float size;
       attribute vec3 color;
@@ -1226,17 +1376,18 @@ function ensureHwSimScene(){
       void main(){
         vColor = color;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (260.0 / -mvPosition.z);
+        gl_PointSize = size * (185.0 / -mvPosition.z);
         gl_Position = projectionMatrix * mvPosition;
       }
     `,
     fragmentShader: `
       precision mediump float;
       uniform sampler2D map;
+      uniform float dim;
       varying vec3 vColor;
       void main(){
         vec4 tex = texture2D(map, gl_PointCoord);
-        gl_FragColor = vec4(vColor, 1.0) * tex;
+        gl_FragColor = vec4(vColor, 1.0) * tex * dim;
       }
     `,
     transparent: true,
@@ -1253,12 +1404,17 @@ function ensureHwSimScene(){
   hwSim = {
     THREE, scene, camera, renderer, container, fitDist,
     emitterMarkers, markerMats, emitterPositions,
-    positions, colorsAttr, sizesAttr, pVel, pAge, pLife, pEmitter, respawnParticle, geo, points,
+    positions, colorsAttr, sizesAttr, pVel, pAge, pLife, pEmitter, pWasRising, pPopT, respawnParticle, geo, points,
+    total, trailCount,
     emitterEnergy: new Float32Array(n),
     sparkT: new Float32Array(n).fill(-1), // -1 = not currently sparking
     count: n, currentAngles, totalWidth, viewMode: (hwSim ? hwSim.viewMode : 'side'),
+    composer: null, bloomPass: null,
+    controls: null, // attached lazily by attachHwControlsIfReady once the async module lands
   };
   setHwSimView(hwSim.viewMode);
+  attachHwBloomIfReady(); // in case the async modules already finished loading by the time we got here
+  attachHwControlsIfReady();
   return true;
 }
 
@@ -1274,13 +1430,20 @@ function setHwSimView(mode){
     hwSim.camera.position.set(0, targetY, d);
   }
   hwSim.camera.lookAt(0, targetY, 0);
-  const btn = document.getElementById('hwSimViewBtn');
-  if(btn) btn.textContent = mode === 'angle' ? 'Side view' : 'Angled view';
+  if(hwSim.controls){
+    // Once OrbitControls is attached, it owns the camera each frame — resync its target/spherical
+    // state to this preset too, or the next update() would just pull the camera back to wherever
+    // the user last dragged it, silently undoing the button.
+    hwSim.controls.target.set(0, targetY, 0);
+    hwSim.controls.update();
+  }
 }
 
 function updateHwSimulator(now, dt){
   if(!hardwareEngine.simulate) return;
   if(!ensureHwSimScene()) return;
+  if(hwPostFXState === 'idle') ensureHwPostFX(); // fire-and-forget; only kicks off once
+  if(hwControlsState === 'idle') ensureHwOrbitControlsModule();
 
   // Command angles come from the same computeServoAngles() real/external hardware already uses
   // (same AGC, same servoCount) — resampled to exactly 8 to match the real firmware's fixed pin
@@ -1310,6 +1473,7 @@ function updateHwSimulator(now, dt){
   // reused here as a shared burst boost across every emitter on every detected beat. Only active
   // in Audio mode; 0 otherwise, so it never fakes motion when there's no real beat to react to.
   const beat = (engine.mode === 'audio') ? audioEngine.beatPulse : 0;
+  let avgEnergy = 0;
 
   for(let i = 0; i < hwSim.count; i++){
     const cur = hwSim.currentAngles[i];
@@ -1354,17 +1518,65 @@ function updateHwSimulator(now, dt){
       if(hwSim.pAge[p] >= hwSim.pLife[p]) hwSim.respawnParticle(p, energy);
       const lifeT = hwSim.pAge[p] / hwSim.pLife[p];
       hwSim.pVel[p].y -= HW_GRAVITY * dt;
+
+      // Apex burst — the instant a particle crosses from rising to falling, give it a brief
+      // outward kick (still subject to gravity afterward, so it keeps falling naturally) and a
+      // flash, like a shell popping at the top of its arc rather than just quietly turning over.
+      const rising = hwSim.pVel[p].y > 0;
+      if(hwSim.pWasRising[p] && !rising){
+        hwSim.pPopT[p] = 0;
+        const kick = 0.5 + energy * 1.1;
+        hwSim.pVel[p].x += (Math.random() - 0.5) * kick;
+        hwSim.pVel[p].z += (Math.random() - 0.5) * kick;
+      }
+      hwSim.pWasRising[p] = rising ? 1 : 0;
+      let popFlash = 0;
+      if(hwSim.pPopT[p] >= 0){
+        hwSim.pPopT[p] += dt;
+        const pp = hwSim.pPopT[p] / HW_POP_DURATION;
+        if(pp >= 1) hwSim.pPopT[p] = -1;
+        else popFlash = 1 - pp;
+      }
+
       hwSim.positions[p * 3] += hwSim.pVel[p].x * dt;
       hwSim.positions[p * 3 + 1] += hwSim.pVel[p].y * dt;
       hwSim.positions[p * 3 + 2] += hwSim.pVel[p].z * dt;
       const fade = Math.sin(Math.min(1, lifeT) * Math.PI);
-      hwSim.sizesAttr[p] = (1.1 + energy * 2.4) * fade;
+      hwSim.sizesAttr[p] = (0.85 + energy * 1.7) * fade + popFlash * 1.8;
+    }
+    avgEnergy += energy;
+  }
+  avgEnergy = hwSim.count ? avgEnergy / hwSim.count : 0;
+
+  // Trail echoes — a cheap comet tail: each echo eases toward its lead particle's current
+  // position (just written above) with its own lag, no independent physics of its own. Real
+  // motion drives it; this is a smoothed rendering of that motion, not a second data source.
+  for(let k = 0; k < hwSim.trailCount; k++){
+    const lag = HW_TRAIL_LAG[k], scale = HW_TRAIL_SCALE[k];
+    for(let p = 0; p < hwSim.total; p++){
+      const echoIdx = hwSim.total + k * hwSim.total + p;
+      hwSim.positions[echoIdx * 3]     += (hwSim.positions[p * 3]     - hwSim.positions[echoIdx * 3])     * lag;
+      hwSim.positions[echoIdx * 3 + 1] += (hwSim.positions[p * 3 + 1] - hwSim.positions[echoIdx * 3 + 1]) * lag;
+      hwSim.positions[echoIdx * 3 + 2] += (hwSim.positions[p * 3 + 2] - hwSim.positions[echoIdx * 3 + 2]) * lag;
+      hwSim.sizesAttr[echoIdx] = hwSim.sizesAttr[p] * scale;
     }
   }
+
   hwSim.geo.attributes.position.needsUpdate = true;
   hwSim.geo.attributes.size.needsUpdate = true;
 
-  hwSim.renderer.render(hwSim.scene, hwSim.camera);
+  // Interactive camera: OrbitControls (drag to orbit, scroll to zoom) once loaded, with a
+  // user-toggleable auto-rotate (hwSimAutoRotate) instead of v1.27.0's forced always-on drift
+  // that had no way to be stopped. Falls back to the static side/angled preset camera (set by
+  // setHwSimView, untouched here) until the controls module lands.
+  if(hwSim.controls) hwSim.controls.update();
+
+  if(hwSim.composer){
+    hwSim.bloomPass.strength = 0.15 + avgEnergy * 0.28; // more activity = more glow, never fully off
+    hwSim.composer.render();
+  } else {
+    hwSim.renderer.render(hwSim.scene, hwSim.camera);
+  }
 }
 
 
@@ -1969,22 +2181,31 @@ function render(){ if(view === 'home') return renderHome(); }
 
 function renderHome(){
   main.innerHTML = `
-    <div id="stage">
-      <div id="stageHint">drag to orbit &middot; scroll to zoom</div>
-      <div id="stageViewControls">
-        <button id="stageRecenterBtn" title="Reset camera to the default view">Recenter</button>
-        <button id="stageTopBtn" title="Look straight down">Top</button>
-        <button id="stageSideBtn" title="Look from the side">Side</button>
+    <div style="display:flex; flex-direction:column; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
+      <span style="font-size:12px; font-weight:600; letter-spacing:0.04em; color:var(--ink-soft); text-transform:uppercase; margin-bottom:10px; display:block;">Kinetic sculpture — live 3D view</span>
+      <div id="stage">
+        <div id="stageViewControls">
+          <button id="autoRotateBtn" title="Toggle the slow ambient spin">Auto-rotate: on</button>
+          <button id="stageRecenterBtn" title="Reset camera to the default view">Recenter</button>
+          <button id="stageTopBtn" title="Look straight down">Top</button>
+          <button id="stageSideBtn" title="Look from the side">Side</button>
+        </div>
       </div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-top:6px;">Drag to orbit, scroll to zoom.</div>
     </div>
 
-    <div id="hwSimWrap" style="display:none; flex-direction:column; margin:0 0 18px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-        <span style="font-size:12px; font-weight:600; letter-spacing:0.04em; color:var(--ink-soft); text-transform:uppercase;">Simulated rig — no hardware needed</span>
-        <button class="btn ghost" id="hwSimViewBtn" style="padding:5px 12px; font-size:12px;">Angled view</button>
+    <div id="hwSimWrap" style="display:none; flex-direction:column; margin:18px 0; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:12px;">
+      <span style="font-size:12px; font-weight:600; letter-spacing:0.04em; color:var(--ink-soft); text-transform:uppercase; margin-bottom:10px; display:block;">Simulated rig — no hardware needed</span>
+      <div id="hwSimViewport" style="width:100%; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep);">
+        <div id="hwSimViewControls">
+          <button id="hwSimAutoRotateBtn" title="Toggle the slow drift">Auto-rotate: on</button>
+          <button id="hwSimRecenterBtn" title="Reset camera to the default view">Recenter</button>
+          <button id="hwSimAngledBtn" title="Angled preset view">Angled</button>
+          <button id="hwSimSideBtn" title="Side preset view">Side</button>
+        </div>
       </div>
-      <div id="hwSimViewport" style="width:100%; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);"></div>
-      <div id="hwFirmwareStatus" style="font-size:11px; color:var(--ink-soft); margin-top:8px;"></div>
+      <div style="font-size:11px; color:var(--ink-soft); margin-top:6px;">Drag to orbit, scroll to zoom.</div>
+      <div id="hwFirmwareStatus" style="font-size:11px; color:var(--ink-soft); margin-top:2px;"></div>
     </div>
 
     <div class="panel">
@@ -2072,7 +2293,15 @@ function renderHome(){
           <input type="range" id="turbSlider" min="0" max="2" step="0.1" value="1">
           <span class="sliderVal" id="turbVal">1.0</span>
         </div>
-        <button class="btn ghost" id="autoRotateBtn">Auto-rotate: on</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row" style="align-items:center;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--ink); cursor:pointer;">
+          <input type="checkbox" id="hwSimulateToggle">
+          Show simulated rig — a 3D preview of the servo rig, no hardware required
+        </label>
       </div>
     </div>
 
@@ -2086,7 +2315,7 @@ function renderHome(){
         <div class="sliderRow" style="min-width:0;">
           <span class="label" style="width:auto; margin:0;">Servo count</span>
           <input type="number" id="hwServoCount" min="1" max="16" value="8" style="width:56px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:6px; padding:6px 8px;">
-          <span class="sliderVal" style="width:auto;">(for real/external hardware — must match NUM_SERVOS in the .ino; the on-screen preview below always mirrors the real 8-servo firmware regardless)</span>
+          <span class="sliderVal" style="width:auto;">(for real/external hardware — must match NUM_SERVOS in the .ino; the on-screen preview above always mirrors the real 8-servo firmware regardless)</span>
         </div>
       </div>
       <div class="row">
@@ -2119,12 +2348,6 @@ function renderHome(){
       </div>
       <div class="row">
         <span class="sliderVal" id="hwSensorStatus" style="width:auto; text-align:left;">No sensor readings yet.</span>
-      </div>
-      <div class="row" style="align-items:center;">
-        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); cursor:pointer;">
-          <input type="checkbox" id="hwSimulateToggle">
-          Show simulated rig (3D preview — runs FORMFIND's real firmware right here, no terminal needed)
-        </label>
       </div>
     </div>
   `;
@@ -2183,8 +2406,13 @@ function renderHome(){
     document.getElementById('hwSimWrap').style.display = e.target.checked ? 'flex' : 'none';
     if(e.target.checked) ensureHwSimScene();
   };
-  document.getElementById('hwSimViewBtn').onclick = ()=>{
-    setHwSimView(hwSim && hwSim.viewMode === 'angle' ? 'side' : 'angle');
+  document.getElementById('hwSimAngledBtn').onclick = ()=> setHwSimView('angle');
+  document.getElementById('hwSimSideBtn').onclick = ()=> setHwSimView('side');
+  document.getElementById('hwSimRecenterBtn').onclick = ()=> setHwSimView(hwSim ? hwSim.viewMode : 'angle');
+  document.getElementById('hwSimAutoRotateBtn').onclick = (e)=>{
+    hwSimAutoRotate = !hwSimAutoRotate;
+    e.target.textContent = 'Auto-rotate: ' + (hwSimAutoRotate ? 'on' : 'off');
+    if(hwSim && hwSim.controls) hwSim.controls.autoRotate = hwSimAutoRotate;
   };
   if(!('serial' in navigator)){
     document.getElementById('hwConnectBtn').disabled = true;
@@ -2370,12 +2598,30 @@ function updateModeButtons(){
 function applyThemeChrome(){
   document.getElementById('themeColorMeta').setAttribute('content', '#0B0C0E');
 }
+// Desktop/tablet only, same convention as Joe's other Three.js tools (e.g. modulor.axisbim.io):
+// a hard gate rather than a responsive mobile redesign. Below the breakpoint, the app (Three.js,
+// avr8js, the whole render loop) never initializes at all — not just visually hidden — so nothing
+// is wasted loading a scene a phone was never going to show. Re-checked on resize/orientation
+// change; once booted, a later narrow resize just re-shows the gate over the still-running app
+// rather than tearing anything down, and widening back out hides it again.
+const SCREEN_GATE_MIN_WIDTH = 768;
+let appBooted = false;
+function checkScreenGate(){
+  const gate = document.getElementById('screenGate');
+  const wide = window.innerWidth >= SCREEN_GATE_MIN_WIDTH;
+  gate.style.display = wide ? 'none' : 'flex';
+  if(wide && !appBooted){
+    appBooted = true;
+    render();
+  }
+}
 (function boot(){
   applyThemeChrome();
   document.getElementById('footVersion').innerHTML =
     `FORMFIND · v${APP_VERSION} · Joe.K · <a href="https://axisbim.io" target="_blank" rel="noopener">axisbim.io</a>`;
   document.getElementById('helpBtn').onclick = showHelp;
-  render();
+  checkScreenGate();
+  window.addEventListener('resize', checkScreenGate);
 })();
 
 </script>
