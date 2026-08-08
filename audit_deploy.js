@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * FORMFIND — deploy audit
+ * MURMUR — deploy audit
  * Joe.K · axisbim.io
  *
  * Local-only pre-ship check for index.html and CHANGELOG.md. Run before every deploy:
@@ -172,14 +172,14 @@ check('Wokwi bridge connect handler catches a failed module import the same way'
 sectionHeader('v1.12.0 — avr8js simulator bridge');
 check('Physical Rig panel label documents the simulator bridge backend', /avr8js_sim_bridge\.js/.test(src));
 check('Help modal also documents the simulator bridge backend', /AVR8JS_SETUP\.md/.test(src));
-const SIM_BRIDGE_FILE = path.join(__dirname, 'formfind_servo', 'avr8js_sim_bridge.js');
+const SIM_BRIDGE_FILE = path.join(__dirname, 'murmur_servo', 'avr8js_sim_bridge.js');
 const simBridgeSrc = fs.existsSync(SIM_BRIDGE_FILE) ? fs.readFileSync(SIM_BRIDGE_FILE, 'utf8') : null;
-check('formfind_servo/avr8js_sim_bridge.js exists', !!simBridgeSrc);
-check('formfind_servo/formfind_servo.hex (compiled firmware) exists', fs.existsSync(path.join(__dirname, 'formfind_servo', 'formfind_servo.hex')));
-check('formfind_servo/build_hex.sh exists', fs.existsSync(path.join(__dirname, 'formfind_servo', 'build_hex.sh')));
-check('formfind_servo/AVR8JS_SETUP.md exists', fs.existsSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md')));
+check('murmur_servo/avr8js_sim_bridge.js exists', !!simBridgeSrc);
+check('murmur_servo/murmur_servo.hex (compiled firmware) exists', fs.existsSync(path.join(__dirname, 'murmur_servo', 'murmur_servo.hex')));
+check('murmur_servo/build_hex.sh exists', fs.existsSync(path.join(__dirname, 'murmur_servo', 'build_hex.sh')));
+check('murmur_servo/AVR8JS_SETUP.md exists', fs.existsSync(path.join(__dirname, 'murmur_servo', 'AVR8JS_SETUP.md')));
 if (simBridgeSrc) {
-  check('sim bridge defaults to the same WS port (8765) FORMFIND\'s UI defaults to', /argValue\('port', '8765'\)/.test(simBridgeSrc));
+  check('sim bridge defaults to the same WS port (8765) MURMUR\'s UI defaults to', /argValue\('port', '8765'\)/.test(simBridgeSrc));
   check('sim bridge paces execution to real time rather than running flat-out (avoids flooding the ~20Hz sensor stream)', /startWall/.test(simBridgeSrc) && /MAX_CATCHUP_SEC/.test(simBridgeSrc));
   check('sim bridge decodes servo angles from measured PWM pulse widths, not from the commanded value directly', /riseCycle/.test(simBridgeSrc) && /MIN_PULSE_US/.test(simBridgeSrc));
   check('sim bridge speaks the onLineTransmit / message line protocol matching hardware-bridge.js', /onLineTransmit/.test(simBridgeSrc) && /ws\.on\('message'/.test(simBridgeSrc));
@@ -198,8 +198,8 @@ if (simBridgeSrc) {
 
 /* ===================== v1.14.0 — Wokwi live-relay removal ===================== */
 sectionHeader('v1.14.0 — Wokwi live-relay removal');
-check('wokwi_bridge.py (dead WebSerial/com0com relay) removed', !fs.existsSync(path.join(__dirname, 'formfind_servo', 'wokwi_bridge.py')));
-check('wokwi_ws_bridge.py (redundant Wokwi WebSocket relay) removed', !fs.existsSync(path.join(__dirname, 'formfind_servo', 'wokwi_ws_bridge.py')));
+check('wokwi_bridge.py (dead WebSerial/com0com relay) removed', !fs.existsSync(path.join(__dirname, 'murmur_servo', 'wokwi_bridge.py')));
+check('wokwi_ws_bridge.py (redundant Wokwi WebSocket relay) removed', !fs.existsSync(path.join(__dirname, 'murmur_servo', 'wokwi_ws_bridge.py')));
 check('no leftover "Wokwi Bridge" / wokwi_ws_bridge.py references in index.html', !/wokwi_ws_bridge\.py/.test(src) && !/Wokwi Bridge/.test(src));
 check('connect button renamed to reflect it\'s exclusively the simulator bridge now', /Connect via Simulator Bridge/.test(src));
 
@@ -207,7 +207,7 @@ check('connect button renamed to reflect it\'s exclusively the simulator bridge 
 sectionHeader('v1.15.0 — stick-figure rig + Wokwi embed removal');
 check('static Wokwi iframe embed removed (was v1.10.0, superseded by v1.14.0\'s decision to cut it)', !/iframe\.src = `https:\/\/wokwi\.com\/projects\/\$\{m\[1\]\}`/.test(src) && !/wokwiEmbedWrap/.test(src) && !/wokwiUrlInput/.test(src));
 check('loadWokwiEmbed function and its button binding removed', !/function loadWokwiEmbed/.test(src) && !/wokwiLoadBtn/.test(src));
-check('formfind_servo/WOKWI_SETUP.md, diagram.json, wokwi.toml removed (only existed to support the deleted embed)', !fs.existsSync(path.join(__dirname, 'formfind_servo', 'WOKWI_SETUP.md')) && !fs.existsSync(path.join(__dirname, 'formfind_servo', 'diagram.json')) && !fs.existsSync(path.join(__dirname, 'formfind_servo', 'wokwi.toml')));
+check('murmur_servo/WOKWI_SETUP.md, diagram.json, wokwi.toml removed (only existed to support the deleted embed)', !fs.existsSync(path.join(__dirname, 'murmur_servo', 'WOKWI_SETUP.md')) && !fs.existsSync(path.join(__dirname, 'murmur_servo', 'diagram.json')) && !fs.existsSync(path.join(__dirname, 'murmur_servo', 'wokwi.toml')));
 check('3D "simulated rig" preview rebuilt as popsicle-stick figures, not posts/spheres', /HW_TORSO_LEN/.test(src) && /stickMat/.test(src) && !/pedestalGeo/.test(src));
 check('checkbox label describes the stick-figure visual', /popsicle-stick figures/.test(src));
 if (simBridgeSrc) {
@@ -239,7 +239,7 @@ if (simBridgeSrc) {
   check('avr8js dashboard: head glow driven by real angle deviation; background pulse driven by the real A0 sensor reading', /deviation = Math\.abs\(deg - 90\)/.test(simBridgeSrc) && /data\.sensor \/ 1023\) \* 0\.16/.test(simBridgeSrc));
   check('avr8js dashboard: ground shadow + wood-grain <pattern> added, defined in a proper shared <svg> root', /woodGrain/.test(simBridgeSrc) && /defsSvg = document\.createElementNS/.test(simBridgeSrc));
   check('avr8js dashboard: per-figure character variation (deterministic pseudoRandom, not per-frame noise)', /function pseudoRandom/.test(simBridgeSrc));
-  check('avr8js dashboard: connection-status mood (.asleep class) driven by the real formfindConnected flag', /rig\.classList\.toggle\('asleep', !connected\)/.test(simBridgeSrc));
+  check('avr8js dashboard: connection-status mood (.asleep class) driven by the real murmurConnected flag', /rig\.classList\.toggle\('asleep', !connected\)/.test(simBridgeSrc));
   check('avr8js dashboard: milestone spark class only re-triggers on a genuine extreme crossing, not every frame at the extreme', /wasNearExtreme\[i\] = nearExtreme/.test(simBridgeSrc));
 }
 
@@ -274,8 +274,8 @@ check('firmware runs in a dedicated Web Worker, not the main render loop (the ac
 check('worker self-paces its own tick loop off real wall-clock time, independent of the main thread\'s frame rate', /MAX_CATCHUP_SEC = 0\.25/.test(src) && /startWall = performance\.now\(\)/.test(src));
 check('main thread reads the worker\'s latest decoded angles at near-zero cost instead of running the simulation itself', /target = hwFirmwareAngles/.test(src));
 check('commands to the worker are throttled (~20Hz), not posted every single render frame', /HW_FIRMWARE_COMMAND_INTERVAL = 0\.05/.test(src));
-if (fs.existsSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md'))) {
-  const setupDoc = fs.readFileSync(path.join(__dirname, 'formfind_servo', 'AVR8JS_SETUP.md'), 'utf8');
+if (fs.existsSync(path.join(__dirname, 'murmur_servo', 'AVR8JS_SETUP.md'))) {
+  const setupDoc = fs.readFileSync(path.join(__dirname, 'murmur_servo', 'AVR8JS_SETUP.md'), 'utf8');
   check('AVR8JS_SETUP.md updated to present the embedded version as the default path, not just the external script', /don't need anything in this/.test(setupDoc) && /embedded/.test(setupDoc));
 }
 

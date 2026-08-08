@@ -2,12 +2,12 @@
   hardware-bridge.js
   -------------------
   A reusable WebSerial bridge between a browser tool and an Arduino running
-  arduino/formfind_servo/formfind_servo.ino (or any sketch speaking the same
-  protocol). First built for FORMFIND (formfind.html); pulled out here so any
+  arduino/murmur_servo/murmur_servo.ino (or any sketch speaking the same
+  protocol). First built for MURMUR (index.html); pulled out here so any
   of Joe's generative-design-tools can drive the same physical rig without
   duplicating the connect/disconnect/read-loop/error-handling logic.
 
-  PROTOCOL (matches formfind_servo.ino)
+  PROTOCOL (matches murmur_servo.ino)
   --------------------------------------
   Browser -> Arduino, one line per send interval:
       A<angle0>,<angle1>,...,<angleN-1>\n      e.g. "A118,45,90,73\n"
@@ -163,7 +163,7 @@ export function createHardwareBridge({
   same getAngles/onSensorReading/onStatusChange callbacks) but talks over a
   plain WebSocket instead of WebSerial. Built for connecting to a local
   bridge script that runs or relays to the actual firmware — see
-  formfind_servo/avr8js_sim_bridge.js (runs the real firmware locally via
+  murmur_servo/avr8js_sim_bridge.js (runs the real firmware locally via
   avr8js) — no virtual COM port driver, no OS-level driver signing to
   fight. Works for any WebSocket-speaking target that understands the same
   line protocol, not tied to any one backend.

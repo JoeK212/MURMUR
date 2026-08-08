@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  FORMFIND
+  MURMUR
   A field of kinetic spheres that drift through noise and resolve into shapes — inspired by ART+COM's BMW Kinetic Sculpture.
   Joe.K · axisbim.io
 -->
@@ -11,9 +11,9 @@
 <meta name="description" content="A field of kinetic spheres that drift through noise and resolve into shapes or text.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="FORMFIND">
+<meta name="apple-mobile-web-app-title" content="MURMUR">
 <meta name="theme-color" content="#0B0C0E" id="themeColorMeta">
-<title>FORMFIND</title>
+<title>MURMUR</title>
 <style>
   :root{
     --paper: #0B0C0E;
@@ -164,13 +164,13 @@
 <body>
 
 <div id="screenGate">
-  <h1>FORMFIND</h1>
+  <h1>MURMUR</h1>
   <p>This tool requires a tablet or desktop display. Please open it on a larger screen.</p>
   <div class="credit">Joe.K · <a href="https://axisbim.io" target="_blank" rel="noopener">axisbim.io</a></div>
 </div>
 
 <header class="top">
-  <h1>FORMFIND</h1>
+  <h1>MURMUR</h1>
   <p>968 spheres, one form-finding process — watch it drift into shape and dissolve again</p>
   <button class="btn ghost" id="helpBtn" style="position:absolute; top:calc(14px + env(safe-area-inset-top)); right:14px; padding:6px 10px;">Help</button>
 </header>
@@ -191,7 +191,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.36.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.37.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -229,7 +229,7 @@ function showHelp(){
   overlay.className = 'confirm-overlay';
   overlay.innerHTML = `
     <div class="confirm-box" style="max-width:560px; max-height:82vh; overflow-y:auto; text-align:left;">
-      <h2 style="font-family:var(--font-display); font-size:19px; margin:0 0 4px;">FORMFIND — help</h2>
+      <h2 style="font-family:var(--font-display); font-size:19px; margin:0 0 4px;">MURMUR — help</h2>
       <p style="font-size:13px; color:var(--ink-soft); margin:0 0 18px;">A field of kinetic spheres, inspired by ART+COM's BMW Kinetic Sculpture.</p>
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Camera</h3>
@@ -243,13 +243,13 @@ function showHelp(){
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Audio</h3>
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Upload a file or use your microphone. The field becomes a live equalizer — bass on the left, treble on the right — with a beat detector driving a shimmer pulse across the whole grid. Rewind/play-pause/stop/forward controls appear once a source is connected (the mic gets a "Stop microphone" button instead, since there's nothing to seek on a live stream).</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;"><strong>Stems:</strong> FORMFIND doesn't separate a mixed song itself — that needs a trained model. Run your track through <a href="https://github.com/facebookresearch/demucs" target="_blank" rel="noopener">Demucs</a> (free, command-line), <a href="https://www.lalal.ai/stem-splitter/" target="_blank" rel="noopener">LALAL.AI</a>, or <a href="https://moises.ai" target="_blank" rel="noopener">Moises</a> first, then upload the resulting Vocals/Drums/Bass/Other files. Each sphere colors toward whichever stem is loudest at that column right now; the legend shows which color is which. The same transport controls move all loaded stems together, kept in sync.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;"><strong>Stems:</strong> MURMUR doesn't separate a mixed song itself — that needs a trained model. Run your track through <a href="https://github.com/facebookresearch/demucs" target="_blank" rel="noopener">Demucs</a> (free, command-line), <a href="https://www.lalal.ai/stem-splitter/" target="_blank" rel="noopener">LALAL.AI</a>, or <a href="https://moises.ai" target="_blank" rel="noopener">Moises</a> first, then upload the resulting Vocals/Drums/Bass/Other files. Each sphere colors toward whichever stem is loudest at that column right now; the legend shows which color is which. The same transport controls move all loaded stems together, kept in sync.</p>
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
-      <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of launch canisters, each firing particles upward like a firework mortar, launch speed and arc height driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each canister's launch measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/murmur_servo/murmur_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of launch canisters, each firing particles upward like a firework mortar, launch speed and arc height driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets. It's driven by MURMUR's real firmware itself (avr8js, embedded in this page — no terminal, no install), each canister's launch measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" — it has its own panel now, no hardware needed for it — for a 3D preview: a row of launch canisters firing particles upward, firework-mortar style, driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets — same camera controls as the main stage above. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each canister's launch is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" — it has its own panel now, no hardware needed for it — for a 3D preview: a row of launch canisters firing particles upward, firework-mortar style, driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets — same camera controls as the main stage above. This now runs MURMUR's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each canister's launch is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -297,7 +297,7 @@ const PEAK_HEIGHT = 3.2; // shared resolve/audio height scale, spheres-per-unit-
 let three = null; // holds { THREE, scene, camera, renderer, controls, categoryMeshes, dummy, ... }
 
 /* ================= Stem coloring =================
-   FORMFIND does not separate a mixed song itself — that needs a trained model
+   MURMUR does not separate a mixed song itself — that needs a trained model
    (Demucs, etc.) run externally. It accepts up to 4 already-separated stem
    files and colors each sphere by whichever stem is driving its height most. */
 const STEM_KEYS = ['vocals', 'drums', 'bass', 'other'];
@@ -333,7 +333,7 @@ const audioEngine = {
    Mirrors whatever's currently on screen — ambient, manual, or audio, whatever mode
    is active — to a physical rig of hobby servos, one per evenly-spaced column band.
    Chrome/Edge only (WebSerial isn't in the spec for Firefox/Safari). Protocol and
-   firmware: see arduino/formfind_servo/formfind_servo.ino. */
+   firmware: see arduino/murmur_servo/murmur_servo.ino. */
 const HW_HEIGHT_MIN = -2, HW_HEIGHT_MAX = 4; // absolute fallback range only — see HW_AGC below for the range actually used
 const HW_ANGLE_MIN = 20, HW_ANGLE_MAX = 160; // stay off the 0/180 end-stops
 const HW_SEND_INTERVAL_MS = 50; // ~20Hz — plenty for visible motion, easy on the Uno's serial buffer
@@ -362,7 +362,7 @@ function mapRange(v, inMin, inMax, outMin, outMax){
 /* Connect/disconnect, the send loop, and the sensor read loop all live in
    shared/hardware-bridge.js now — pulled out so any of the other generative-
    design-tools can drive the same physical rig without re-implementing the
-   WebSerial plumbing. FORMFIND supplies its own getAngles/onSensorReading;
+   WebSerial plumbing. MURMUR supplies its own getAngles/onSensorReading;
    everything else is generic. Dynamically imported, same pattern as three.js
    below, since this script isn't itself a module. */
 let hwBridge = null;
@@ -441,11 +441,11 @@ function applySensorReading(norm){
 }
 
 /* ================= Embedded avr8js firmware simulation =================
-   Runs formfind_servo.ino's REAL compiled firmware directly in this browser
+   Runs murmur_servo.ino's REAL compiled firmware directly in this browser
    tab via avr8js (github.com/wokwi/avr8js, MIT — the same open-source AVR
    core that powers Wokwi itself, which runs entirely client-side). No
    Node.js, no terminal, no npm install — this is the exact same simulation
-   formfind_servo/avr8js_sim_bridge.js does from a terminal (same hex, same
+   murmur_servo/avr8js_sim_bridge.js does from a terminal (same hex, same
    CPU/peripheral setup, same PWM-pulse decode), just running inside this
    page instead. That external script + its own live dashboard still work
    and remain useful (a separate window, a shareable ws:// endpoint for
@@ -453,9 +453,9 @@ function applySensorReading(norm){
    simulated rig" needs nothing else running.
    Loaded from a CDN (jsdelivr) at runtime, not bundled — if that fails
    (offline, CDN blocked), this falls back to the direct angle-mirror
-   preview FORMFIND always had, rather than breaking outright. */
+   preview MURMUR always had, rather than breaking outright. */
 /* ================= Embedded avr8js firmware simulation (Web Worker) =================
-   Runs formfind_servo.ino's REAL compiled firmware inside avr8js
+   Runs murmur_servo.ino's REAL compiled firmware inside avr8js
    (github.com/wokwi/avr8js, MIT — the same open-source AVR core that powers
    Wokwi itself). Executes in a dedicated Web Worker, not the main thread —
    the raw AVR instruction-stepping loop is real per-cycle CPU emulation and
@@ -465,7 +465,7 @@ function applySensorReading(norm){
    in a worker means the main thread's per-frame cost for this feature is
    just reading a small array — the actual simulation work no longer
    competes with rendering or audio at all.
-   This is the exact same simulation formfind_servo/avr8js_sim_bridge.js
+   This is the exact same simulation murmur_servo/avr8js_sim_bridge.js
    does from a terminal (same hex, same CPU/peripheral setup, same PWM-pulse
    decode) — that external script + its own dashboard still work too, for a
    separate window or a shareable ws:// endpoint.
@@ -473,7 +473,7 @@ function applySensorReading(norm){
    page's import map — worker-scoped import map support is inconsistent
    across browsers, so the worker uses the full CDN URL directly). If that
    fails (offline, CDN blocked), the preview falls back to the direct
-   angle-mirror behavior FORMFIND always had, rather than breaking. */
+   angle-mirror behavior MURMUR always had, rather than breaking. */
 const EMBEDDED_FIRMWARE_HEX = `:100000000C945F000C9447040C9420040C9487001B
 :100010000C9487000C9487000C9487000C946E0459
 :100020000C9487000C9487000C9487000C94EE04C9
@@ -857,7 +857,7 @@ const EMBEDDED_FIRMWARE_HEX = `:100000000C945F000C9447040C9420040C9487001B
 :0617B80059000D0A0000BB
 :00000001FF
 `;
-const HW_FIRMWARE_SERVO_COUNT = 8; // matches formfind_servo.ino's NUM_SERVOS/SERVO_PINS exactly — fixed by the real compiled firmware, not by the "servo count" field (that field still controls how many angles go out to real/external hardware; the embedded preview always mirrors the real 8-pin sketch)
+const HW_FIRMWARE_SERVO_COUNT = 8; // matches murmur_servo.ino's NUM_SERVOS/SERVO_PINS exactly — fixed by the real compiled firmware, not by the "servo count" field (that field still controls how many angles go out to real/external hardware; the embedded preview always mirrors the real 8-pin sketch)
 
 const HW_FIRMWARE_WORKER_SRC = `
 let cpu = null, avrInstruction = null, usart = null, adc = null;
@@ -2068,7 +2068,7 @@ function updateAmbient(dt){
       if(t > 4){ engine.ambientPhase = 'resolving'; engine.ambientTimer = 0;
         const p = AMBIENT_PRESETS[engine.ambientPresetIdx % AMBIENT_PRESETS.length];
         engine.ambientPresetIdx++;
-        if(p === 'text') resolveTo({ type: 'text', text: 'FORMFIND' });
+        if(p === 'text') resolveTo({ type: 'text', text: 'MURMUR' });
         else resolveTo({ type: 'preset', preset: p });
       }
       break;
@@ -2221,7 +2221,7 @@ function renderHome(){
       <div class="row" id="manualControls" style="display:none;">
         <div class="label">Resolve into</div>
         <div class="row" style="margin-top:0;">
-          <input id="textInput" type="text" maxlength="12" placeholder="Type a word (max 12 chars)" value="FORMFIND">
+          <input id="textInput" type="text" maxlength="12" placeholder="Type a word (max 12 chars)" value="MURMUR">
           <button class="btn accent" id="resolveTextBtn">Resolve</button>
         </div>
         <div class="row" style="margin-top:8px;">
@@ -2336,7 +2336,7 @@ function renderHome(){
         </div>
       </details>
       <div class="row" style="align-items:center; border-top:1px solid var(--line); padding-top:12px; margin-top:4px;">
-        <div class="label">Sensor input — a potentiometer or photoresistor on the Arduino can drive a control here live, closing the loop back into FORMFIND.</div>
+        <div class="label">Sensor input — a potentiometer or photoresistor on the Arduino can drive a control here live, closing the loop back into MURMUR.</div>
         <div class="group">
           <span class="label" style="width:auto; margin:0;">Sensor drives</span>
           <select id="hwSensorTarget" style="background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:6px; padding:8px 10px; font-size:13px;">
@@ -2618,7 +2618,7 @@ function checkScreenGate(){
 (function boot(){
   applyThemeChrome();
   document.getElementById('footVersion').innerHTML =
-    `FORMFIND · v${APP_VERSION} · Joe.K · <a href="https://axisbim.io" target="_blank" rel="noopener">axisbim.io</a>`;
+    `MURMUR · v${APP_VERSION} · Joe.K · <a href="https://axisbim.io" target="_blank" rel="noopener">axisbim.io</a>`;
   document.getElementById('helpBtn').onclick = showHelp;
   checkScreenGate();
   window.addEventListener('resize', checkScreenGate);
