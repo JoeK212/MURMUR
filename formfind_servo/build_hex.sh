@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build_hex.sh
 # -------------
-# Compiles formfind_servo.ino into formfind_servo.hex using the real AVR
+# Compiles murmur_servo.ino into murmur_servo.hex using the real AVR
 # toolchain (avr-gcc/avr-libc), targeting the actual chip on an Arduino Uno
 # (ATmega328p @ 16MHz). This is the SAME hex you'd get from Arduino IDE's
 # "Verify" button, minus the IDE itself — it's what avr8js_sim_bridge.js and
@@ -14,8 +14,8 @@
 # Then point ARDUINO_CORE / SERVO_LIB below at wherever you cloned those two
 # (or pass them as env vars: ARDUINO_CORE=/path SERVO_LIB=/path ./build_hex.sh)
 #
-# Only re-run this if you change formfind_servo.ino itself. The prebuilt
-# formfind_servo.hex already checked into this folder is fine to use as-is
+# Only re-run this if you change murmur_servo.ino itself. The prebuilt
+# murmur_servo.hex already checked into this folder is fine to use as-is
 # for both avr8js_sim_bridge.js and flashing a real Arduino.
 set -e
 
@@ -60,14 +60,14 @@ echo "Compiling sketch..."
 {
   echo '#include <Arduino.h>'
   echo 'void handleLine(const String &line);' # Arduino IDE auto-generates this; we do it by hand
-  cat "$HERE/formfind_servo.ino"
+  cat "$HERE/murmur_servo.ino"
 } > sketch.cpp
 avr-g++ $CXXFLAGS $INCLUDES sketch.cpp -o obj/sketch.cpp.o
 
 echo "Linking..."
-avr-gcc -w -Os -g -flto -fuse-linker-plugin -Wl,--gc-sections -mmcu=$MCU -o formfind_servo.elf obj/*.o -lm
-avr-objcopy -O ihex -R .eeprom formfind_servo.elf "$HERE/formfind_servo.hex"
+avr-gcc -w -Os -g -flto -fuse-linker-plugin -Wl,--gc-sections -mmcu=$MCU -o murmur_servo.elf obj/*.o -lm
+avr-objcopy -O ihex -R .eeprom murmur_servo.elf "$HERE/murmur_servo.hex"
 
-avr-size formfind_servo.elf
-echo "Wrote $HERE/formfind_servo.hex"
+avr-size murmur_servo.elf
+echo "Wrote $HERE/murmur_servo.hex"
 cd "$HERE" && rm -rf "$BUILD"

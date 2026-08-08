@@ -2,20 +2,20 @@
 /*
   avr8js_sim_bridge.js
   ---------------------
-  Runs the REAL formfind_servo.ino firmware — compiled with the actual AVR
+  Runs the REAL murmur_servo.ino firmware — compiled with the actual AVR
   toolchain, not reimplemented — inside avr8js (github.com/wokwi/avr8js, MIT,
   the same simulation core that powers Wokwi itself). No Wokwi account, no
   VS Code extension, no RFC2217, no virtual COM port, no driver signing.
   Just Node.js running the genuine ATmega328p machine code.
 
   Speaks the exact same line protocol over the exact same default WebSocket
-  port (8765) as the retired wokwi_ws_bridge.py, so FORMFIND's "Connect via
+  port (8765) as the retired wokwi_ws_bridge.py, so MURMUR's "Connect via
   Simulator Bridge" button and ws://localhost:8765 field work unchanged.
 
   WHAT'S ACTUALLY SIMULATED
   --------------------------
   - CPU: real ATmega328p core (avr8js), executing the real compiled firmware
-  - Serial (USART0): FORMFIND's "A118,45,...\n" lines are fed in byte-by-byte
+  - Serial (USART0): MURMUR's "A118,45,...\n" lines are fed in byte-by-byte
     at genuine 115200-baud timing; the firmware's own Serial.read()/println()
     do the real work — nothing about the protocol parsing is faked
   - Servos: NOT simulated as a physical servo model. The firmware's Servo
@@ -34,13 +34,13 @@
 
   SETUP
   -----
-  1. cd formfind_servo && npm install        (installs avr8js + ws)
+  1. cd murmur_servo && npm install        (installs avr8js + ws)
   2. node avr8js_sim_bridge.js               (listens on ws://localhost:8765)
-  3. In FORMFIND's Physical Rig panel, click "Connect via Simulator Bridge" —
+  3. In MURMUR's Physical Rig panel, click "Connect via Simulator Bridge" —
      the default URL (ws://localhost:8765) already matches. No Wokwi account
      needed, no VS Code, no simulation panel to keep open.
 
-  If formfind_servo.ino changes, rebuild formfind_servo.hex with
+  If murmur_servo.ino changes, rebuild murmur_servo.hex with
   build_hex.sh (needs gcc-avr + avr-libc; see that script's header comment)
   before restarting this bridge — it loads the .hex fresh on every launch,
   never the .ino source directly.
@@ -76,7 +76,7 @@ function argValue(name, fallback) {
   return hit ? hit.split('=').slice(1).join('=') : fallback;
 }
 const WS_PORT = parseInt(argValue('port', '8765'), 10);
-const HEX_PATH = argValue('hex', path.join(__dirname, 'formfind_servo.hex'));
+const HEX_PATH = argValue('hex', path.join(__dirname, 'murmur_servo.hex'));
 const SENSOR_ARG = argValue('sensor', 'sweep'); // 'sweep' | 'off' | a number 0-1023
 const DASHBOARD_PORT = parseInt(argValue('dashboard-port', '8766'), 10);
 const DASHBOARD_ENABLED = !args.includes('--no-dashboard');
@@ -96,7 +96,7 @@ function loadHex(source, target) {
 
 if (!fs.existsSync(HEX_PATH)) {
   console.error(`Could not find ${HEX_PATH}`);
-  console.error('Run build_hex.sh first, or pass --hex=/path/to/formfind_servo.hex');
+  console.error('Run build_hex.sh first, or pass --hex=/path/to/murmur_servo.hex');
   process.exit(1);
 }
 
@@ -118,7 +118,7 @@ const usart = new AVRUSART(cpu, usart0Config, MHZ);
 const adc = new AVRADC(cpu, adcConfig);
 adc.avcc = 5;
 
-// ---------- Servo pin decode: SERVO_PINS = {2,3,4,5,6,7,8,9} in formfind_servo.ino ----------
+// ---------- Servo pin decode: SERVO_PINS = {2,3,4,5,6,7,8,9} in murmur_servo.ino ----------
 // pins 2-7 -> PORTD bits 2-7, pins 8-9 -> PORTB bits 0-1 (standard Uno pin mapping)
 const SERVO_PIN_MAP = [
   { port: 'D', bit: 2 }, { port: 'D', bit: 3 }, { port: 'D', bit: 4 }, { port: 'D', bit: 5 },
@@ -170,7 +170,7 @@ function sensorValueNow() {
 
 // ---------- Real-time-paced execution loop ----------
 // avr8js's own demo runs flat-out and just reports a speed percentage; that's fine for
-// an interactive tab but wrong here — FORMFIND's sensor stream and servo timing need to
+// an interactive tab but wrong here — MURMUR's sensor stream and servo timing need to
 // track wall-clock at roughly 1x, or the ~20Hz "S<value>" cadence floods or crawls
 // relative to what the browser expects. So this paces cycle execution to real time
 // instead, in small substeps so queued serial bytes get injected at genuine baud timing.
@@ -234,11 +234,11 @@ wss.on('connection', (ws) => {
 });
 
 // ---------- Live browser dashboard: watch the real firmware's servo output move ----------
-// This is a second, independent thing from the FORMFIND<->firmware WS link above — a small
+// This is a second, independent thing from the MURMUR<->firmware WS link above — a small
 // self-served page showing the SAME currentAngles this script already measures from real PWM,
-// animated. Nothing here feeds back into the firmware or FORMFIND; it's read-only, purely so
+// animated. Nothing here feeds back into the firmware or MURMUR; it's read-only, purely so
 // there's somewhere to *watch* what avr8js_sim_bridge.js proved was happening in the terminal
-// numbers. Unlike FORMFIND's own "Show simulated rig" checkbox (which mirrors FORMFIND's
+// numbers. Unlike MURMUR's own "Show simulated rig" checkbox (which mirrors MURMUR's
 // on-screen state), every angle drawn here came from measuring the real firmware's real PWM
 // pulses — if the firmware misbehaves, this dashboard is wrong in the same way, which is the
 // point.
@@ -275,7 +275,7 @@ if (DASHBOARD_ENABLED) {
       angles: currentAngles,
       simTime: cpu.cycles / MHZ,
       sensor: Math.round(sensorValueNow()),
-      formfindConnected: sockets.size > 0,
+      murmurConnected: sockets.size > 0,
     });
     for (const ws of dashboardSockets) {
       if (ws.readyState === WebSocket.OPEN) ws.send(msg);
@@ -289,7 +289,7 @@ function buildDashboardHtml(numServos) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FORMFIND — avr8js live rig</title>
+<title>MURMUR — avr8js live rig</title>
 <style>
   :root{
     --paper:#0B0C0E; --paper-deep:#060708; --card:#131519;
@@ -320,11 +320,11 @@ function buildDashboardHtml(numServos) {
 <body>
   <canvas id="c"></canvas>
   <div class="overlay">
-    <h1>FORMFIND — avr8js live rig</h1>
-    <p class="sub">Each glowing emitter is one servo channel; particles burst from it in real time, driven by the real formfind_servo.ino firmware's real PWM output measured off the simulated pins — not FORMFIND's on-screen state, not a mock. Burst size/speed = how far and how fast that channel's real angle is moving right now. The core pulses with the real A0 sensor reading, and the whole field dims and slows the moment the bridge loses FORMFIND — the three real-data signals here are per-emitter motion, core pulse, and dim/wake.</p>
+    <h1>MURMUR — avr8js live rig</h1>
+    <p class="sub">Each glowing emitter is one servo channel; particles burst from it in real time, driven by the real murmur_servo.ino firmware's real PWM output measured off the simulated pins — not MURMUR's on-screen state, not a mock. Burst size/speed = how far and how fast that channel's real angle is moving right now. The core pulses with the real A0 sensor reading, and the whole field dims and slows the moment the bridge loses MURMUR — the three real-data signals here are per-emitter motion, core pulse, and dim/wake.</p>
     <div class="statusRow">
       <div class="stat"><span class="dot" id="dashDot"></span> dashboard <b id="dashState">connecting…</b></div>
-      <div class="stat"><span class="dot" id="ffDot"></span> FORMFIND <b id="ffState">not connected</b></div>
+      <div class="stat"><span class="dot" id="ffDot"></span> MURMUR <b id="ffState">not connected</b></div>
       <div class="stat">sim time <b id="simTime">0.0s</b></div>
       <div class="stat">A0 sensor <b id="sensorVal">—</b></div>
     </div>
@@ -464,7 +464,7 @@ for (var m = 0; m < NUM; m++) {
 // [TOTAL, TOTAL*(1+TRAIL_LAG.length)) are comet-tail echoes — not independently simulated, they
 // just ease toward their lead's current position each frame (see animate()), so the trail is a
 // smoothed rendering of the same real launch, not a second data source. Same technique as
-// FORMFIND's own embedded preview (index.html's hwSim), applied here for visual parity.
+// MURMUR's own embedded preview (index.html's hwSim), applied here for visual parity.
 var PER_EMITTER = 20;
 var TOTAL = NUM * PER_EMITTER;
 var TRAIL_LAG = [0.34, 0.16];
@@ -626,7 +626,7 @@ function connectSocket() {
     }
     if (typeof data.simTime === 'number') simTimeEl.textContent = data.simTime.toFixed(1) + 's';
     if (typeof data.sensor === 'number') { latestSensor = data.sensor; sensorEl.textContent = data.sensor + ' / 1023'; }
-    connected = !!data.formfindConnected;
+    connected = !!data.murmurConnected;
     ffDot.classList.toggle('live', connected);
     ffState.textContent = connected ? 'connected' : 'not connected';
   };
@@ -741,11 +741,11 @@ window.addEventListener('resize', function () {
 </html>`;
 }
 
-console.log(`FORMFIND avr8js simulator bridge`);
+console.log(`MURMUR avr8js simulator bridge`);
 console.log(`  Firmware: ${HEX_PATH}`);
 console.log(`  Sensor mode: ${sensorMode}${sensorMode === 'fixed' ? ` (${sensorFixed})` : ''}`);
 console.log(`  Listening on ws://localhost:${WS_PORT}`);
-console.log(`  In FORMFIND's Physical Rig panel: "Connect via Simulator Bridge" (URL already defaults to this port).`);
+console.log(`  In MURMUR's Physical Rig panel: "Connect via Simulator Bridge" (URL already defaults to this port).`);
 if (DASHBOARD_ENABLED) {
   console.log(`  Live visual dashboard: http://localhost:${DASHBOARD_PORT} (open this in a browser tab to watch the arms move)`);
 } else {
