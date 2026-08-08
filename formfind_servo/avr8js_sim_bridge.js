@@ -454,10 +454,10 @@ function respawnParticle(p, energy) {
   positions[p * 3 + 1] = origin.y;
   positions[p * 3 + 2] = origin.z;
   var dir = new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.25) * 1.6, (Math.random() - 0.5)).normalize();
-  var speed = 0.9 + energy * 4.2 + Math.random() * 0.6;
+  var speed = 2.6 + energy * 9.5 + Math.random() * 1.2; // higher baseline + wider energy range so bursts read clearly, not just shimmer
   pVel[p] = dir.multiplyScalar(speed);
   pAge[p] = 0;
-  pLife[p] = 0.7 + Math.random() * 1.1;
+  pLife[p] = 0.45 + Math.random() * 0.75; // shorter life so fast-moving particles read as a burst arc, not a slow drift
   sizesAttr[p] = 0;
 }
 
@@ -484,10 +484,10 @@ var particleMat = new THREE.ShaderMaterial({
     'void main(){',
     '  vColor = color;',
     '  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
-    '  gl_PointSize = size * (320.0 / -mvPosition.z);',
+    '  gl_PointSize = size * (420.0 / -mvPosition.z);',
     '  gl_Position = projectionMatrix * mvPosition;',
     '}'
-  ].join('\\n'),
+  ].join(' '),
   fragmentShader: [
     'precision mediump float;',
     'uniform sampler2D map;',
@@ -496,7 +496,7 @@ var particleMat = new THREE.ShaderMaterial({
     '  vec4 tex = texture2D(map, gl_PointCoord);',
     '  gl_FragColor = vec4(vColor, 1.0) * tex;',
     '}'
-  ].join('\\n'),
+  ].join(' '),
   transparent: true,
   depthWrite: false,
   blending: THREE.AdditiveBlending
@@ -592,7 +592,7 @@ function animate() {
     positions[p * 3 + 2] += pVel[p].z * dt;
     var fade = Math.sin(Math.min(1, lifeT) * Math.PI); // ramps up then back down over its life
     var energyHere = angleEnergy[pEmitter[p]] * connectedSmooth;
-    sizesAttr[p] = (1.1 + energyHere * 3.2) * fade;
+    sizesAttr[p] = (2.2 + energyHere * 6.5) * fade;
   }
   posAttr.needsUpdate = true;
   sizeAttr.needsUpdate = true;
