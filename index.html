@@ -166,7 +166,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.24.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.25.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -222,9 +222,9 @@ function showHelp(){
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/formfind_servo/formfind_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of glowing energy emitters, each bursting particles whose speed and size are driven by that servo's real angle, with a side/angled view toggle. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each emitter's burst measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of launch canisters, each firing particles upward like a firework mortar, launch speed and arc height driven by that servo's real angle, with a side/angled view toggle. It's driven by FORMFIND's real firmware itself (avr8js, embedded in this page — no terminal, no install), each canister's launch measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
       <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — a row of glowing energy emitters, each bursting particles driven by that servo's real angle. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each emitter's burst is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
+      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" in the Physical Rig panel for a 3D preview — a row of launch canisters firing particles upward, firework-mortar style, driven by that servo's real angle. This now runs FORMFIND's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each canister's launch is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -1040,11 +1040,12 @@ let hwSim = null; // { THREE, scene, camera, renderer, container, count, current
 // standalone dashboard (v1.23.0/1) — glowing ring emitters, additive particle bursts — applied here
 // to the embedded row layout instead of a ring, since the row is what the camera/view-toggle system
 // below is fit to.
-const HW_EMITTER_Y = 0.9; // row sits at this height, particles burst around it
-const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.05; // gentle idle float, purely decorative
+const HW_CANISTER_H = 0.24; // launch tube height — particles fire from its mouth, like a firework mortar
+const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.015; // tiny idle shimmer on the opening ring, purely decorative
+const HW_GRAVITY = 3.1; // pulls launched particles into a real arc instead of a flat radial burst
 const HW_SPARK_THRESHOLD_DEG = 3; // how close to 0/180 counts as "hit the extreme"
 const HW_SPARK_DURATION = 0.4; // seconds
-const HW_PER_EMITTER_PARTICLES = 34;
+const HW_PER_EMITTER_PARTICLES = 22; // fewer particles per emitter — dense overlapping additive sprites were part of what was blowing out to white
 
 function hwPseudoRandom(seed){ // deterministic per-index "randomness" so re-running doesn't reshuffle character variation
   const x = Math.sin(seed * 12.9898) * 43758.5453;
@@ -1056,8 +1057,8 @@ function hwSpriteTexture(){
   c.width = c.height = 64;
   const ctx = c.getContext('2d');
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0, 'rgba(255,255,255,0.85)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.4)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
@@ -1076,7 +1077,7 @@ function ensureHwSimScene(){
     container.innerHTML = '';
   }
 
-  const w = container.clientWidth || 400, h = 280; // bigger now that it has its own space below the main stage, not squeezed into the panel
+  const w = container.clientWidth || 400, h = 360; // taller now that bursts launch upward like fireworks and need real headroom, not just a strip
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x060708);
   scene.fog = new THREE.Fog(0x060708, 8, 22);
@@ -1084,8 +1085,8 @@ function ensureHwSimScene(){
   const n = HW_FIRMWARE_SERVO_COUNT; // always 8 — the on-screen preview mirrors the real compiled sketch's fixed pin count
   const spacing = 1.0;
   const totalWidth = (n - 1) * spacing;
-  const requiredHeight = 2.4; // room for particle bursts above/below the emitter row
-  const requiredWidth = totalWidth + 2.0; // room for bursts on the end emitters
+  const requiredHeight = 6.5; // tall enough to frame a full launch-arc-fade arc, not just a strip at ground level
+  const requiredWidth = totalWidth + 3.0; // room for lateral scatter on launch
   const aspect = w / h;
 
   // Perspective, not orthographic — reads as genuinely 3D (matches the main kinetic-sculpture
@@ -1110,6 +1111,13 @@ function ensureHwSimScene(){
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(w, h);
+  // No tone mapping was set here before, so overlapping additive sprites just clipped every
+  // channel straight to 1.0 the moment a few bursts overlapped — reads as a blown-out white
+  // blob instead of distinct colored bursts, worse the busier the audio gets. ACES compresses
+  // the highlights instead of hard-clipping, so color survives even where several bursts overlap.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.9;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.appendChild(renderer.domElement);
 
   // ground glow strip, purely a visual anchor for the row (subtle, not data-driven)
@@ -1120,23 +1128,47 @@ function ensureHwSimScene(){
   strip.position.set(0, 0.01, 0);
   scene.add(strip);
 
-  const spriteTex = new THREE.CanvasTexture(hwSpriteTexture());
+  // Launch canisters — a short dark tube sunk into the ground strip per servo, with a glowing
+  // opening ring at the mouth (the one real-data-driven part: brightness tracks that channel's
+  // real angle deviation, same role the old floating marker played). Particles now spawn from
+  // the mouth and launch upward like a firework mortar instead of bursting outward from a
+  // floating point in mid-air.
+  const canisterGeo = new THREE.CylinderGeometry(0.1, 0.13, HW_CANISTER_H, 14);
+  canisterGeo.translate(0, HW_CANISTER_H / 2, 0); // pivot at the base so it sits flush on the ground
+  const canisterMat = new THREE.MeshStandardMaterial({ color: 0x1c1e23, metalness: 0.6, roughness: 0.5 });
+  const voidGeo = new THREE.CircleGeometry(0.075, 16);
+  const voidMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const ringGeo = new THREE.RingGeometry(0.06, 0.105, 22);
 
   const emitterPositions = [];
-  const emitterMarkers = [];
+  const emitterMarkers = []; // the glowing opening ring per canister — same "marker" role as before
   const markerMats = [];
   for(let i = 0; i < n; i++){
     const x = i * spacing - totalWidth / 2;
-    emitterPositions.push(new THREE.Vector3(x, HW_EMITTER_Y, 0));
+    emitterPositions.push(new THREE.Vector3(x, HW_CANISTER_H, 0));
+
+    const canister = new THREE.Mesh(canisterGeo, canisterMat);
+    canister.position.set(x, 0, 0);
+    scene.add(canister);
+
+    const voidDisc = new THREE.Mesh(voidGeo, voidMat); // suggests a hollow bore, not a solid cap
+    voidDisc.rotation.x = -Math.PI / 2;
+    voidDisc.position.set(x, HW_CANISTER_H - 0.03, 0);
+    scene.add(voidDisc);
+
     const rnd = hwPseudoRandom(i * 7.3); // 0..1, deterministic per emitter — individuality, not per-frame noise
     const markerColor = new THREE.Color(BASE_SPHERE_COLOR).offsetHSL((rnd - 0.5) * 0.08, 0, 0);
-    const markerMat = new THREE.MeshStandardMaterial({ color: markerColor, metalness: 0.8, roughness: 0.3, emissive: markerColor, emissiveIntensity: 0 });
-    const marker = new THREE.Mesh(new THREE.SphereGeometry(0.14 * (0.92 + rnd * 0.16), 16, 12), markerMat);
-    marker.position.copy(emitterPositions[i]);
-    scene.add(marker);
-    emitterMarkers.push(marker);
+    const markerMat = new THREE.MeshStandardMaterial({ color: markerColor, metalness: 0.4, roughness: 0.4, emissive: markerColor, emissiveIntensity: 0, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, markerMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, HW_CANISTER_H + 0.006, 0);
+    scene.add(ring);
+
+    emitterMarkers.push(ring);
     markerMats.push(markerMat);
   }
+
+  const spriteTex = new THREE.CanvasTexture(hwSpriteTexture());
 
   // Particle burst system — additive sprites, custom shader for per-particle size (see
   // avr8js_sim_bridge.js's dashboard for the same technique; safe to use a plain template-literal
@@ -1159,11 +1191,16 @@ function ensureHwSimScene(){
     positions[p * 3] = origin.x;
     positions[p * 3 + 1] = origin.y;
     positions[p * 3 + 2] = origin.z;
-    const dir = new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.2) * 1.6, (Math.random() - 0.5)).normalize();
-    const speed = 0.55 + energy * 2.4 + Math.random() * 0.3;
-    pVel[p] = dir.multiplyScalar(speed);
+    // Launch mostly straight up, like a mortar shot — energy sets how hard it fires, gravity
+    // (applied per-frame in updateHwSimulator) bends the flight into a real arc rather than a
+    // radial burst. Small lateral scatter so it doesn't look like a single ruler-straight line.
+    const spread = 0.25 + energy * 0.5;
+    const vx = (Math.random() - 0.5) * spread;
+    const vz = (Math.random() - 0.5) * spread;
+    const vy = 1.6 + energy * 3.3 + Math.random() * 0.4;
+    pVel[p] = new THREE.Vector3(vx, vy, vz);
     pAge[p] = 0;
-    pLife[p] = 0.45 + Math.random() * 0.75;
+    pLife[p] = 0.7 + Math.random() * 0.9; // fades mid-arc/near-apex, the way real shell sparks burn out
     sizesAttr[p] = 0;
   }
 
@@ -1228,7 +1265,7 @@ function ensureHwSimScene(){
 function setHwSimView(mode){
   if(!hwSim) return;
   hwSim.viewMode = mode;
-  const THREE = hwSim.THREE, d = hwSim.fitDist, targetY = 1.0;
+  const THREE = hwSim.THREE, d = hwSim.fitDist, targetY = 1.7; // raised from the old 1.0 — launches now arc well above the row, so the camera needs to look further up the column, not just at ground-row height
   if(mode === 'angle'){
     const az = THREE.MathUtils.degToRad(34), el = THREE.MathUtils.degToRad(14);
     const horizR = d * Math.cos(el);
@@ -1305,23 +1342,23 @@ function updateHwSimulator(now, dt){
     const energy = Math.min(1, hwSim.emitterEnergy[i] * moodMul + flash * 0.8);
 
     // Marker glow + gentle idle float — real-data brightness, decorative float
-    hwSim.markerMats[i].emissiveIntensity = deviation * 1.1 + flash * 2.0;
-    const bob = Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + i * 0.5) * HW_IDLE_BOB_AMPLITUDE;
-    hwSim.emitterMarkers[i].position.y = HW_EMITTER_Y + bob;
-    hwSim.emitterMarkers[i].scale.setScalar(1 + energy * 0.6);
-    hwSim.emitterPositions[i].y = hwSim.emitterMarkers[i].position.y; // particles spawn from the same bobbing point
+    hwSim.markerMats[i].emissiveIntensity = deviation * 0.9 + flash * 1.4;
+    const shimmer = 1 + Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + i * 0.5) * HW_IDLE_BOB_AMPLITUDE;
+    hwSim.emitterMarkers[i].scale.setScalar((1 + energy * 0.6) * shimmer); // opening ring widens with real activity
 
-    // Continuous respawn scaled by this channel's energy — always some drift even idle, never a
-    // fully dead marker (same "no dead zone" principle as the main app's turbulence/speed fix).
+    // Continuous respawn scaled by this channel's energy — always some launches even idle, never
+    // a fully dead canister (same "no dead zone" principle as the main app's turbulence/speed fix).
+    // Gravity bends each particle's straight-up launch into a real ballistic arc.
     for(let p = i * HW_PER_EMITTER_PARTICLES; p < (i + 1) * HW_PER_EMITTER_PARTICLES; p++){
       hwSim.pAge[p] += dt;
       if(hwSim.pAge[p] >= hwSim.pLife[p]) hwSim.respawnParticle(p, energy);
       const lifeT = hwSim.pAge[p] / hwSim.pLife[p];
+      hwSim.pVel[p].y -= HW_GRAVITY * dt;
       hwSim.positions[p * 3] += hwSim.pVel[p].x * dt;
       hwSim.positions[p * 3 + 1] += hwSim.pVel[p].y * dt;
       hwSim.positions[p * 3 + 2] += hwSim.pVel[p].z * dt;
       const fade = Math.sin(Math.min(1, lifeT) * Math.PI);
-      hwSim.sizesAttr[p] = (1.4 + energy * 3.4) * fade;
+      hwSim.sizesAttr[p] = (1.1 + energy * 2.4) * fade;
     }
   }
   hwSim.geo.attributes.position.needsUpdate = true;
