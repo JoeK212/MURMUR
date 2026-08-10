@@ -175,7 +175,14 @@ function sensorValueNow() {
 // relative to what the browser expects. So this paces cycle execution to real time
 // instead, in small substeps so queued serial bytes get injected at genuine baud timing.
 const SUBSTEP_CYCLES = 200; // << one 115200-baud byte period (~1389 cycles) for fine injection timing
-const MAX_CATCHUP_SEC = 0.25; // cap catch-up after a GC pause / slow tick, don't time-warp the firmware
+const MAX_CATCHUP_SEC = 0.01; // cap catch-up after a GC pause / slow tick, don't time-warp the firmware
+// Was 0.25 — dropped to match a fix confirmed live in the browser-embedded version of this exact
+// tick() loop (index.html's Worker copy): letting a single tick() call try to catch up to 4M AVR
+// cycles at once meant each call could take hundreds of ms to return, starving how often queued
+// serial bytes actually got fed, to the point servo angles barely moved from their power-on
+// default. Node's V8 hadn't been observed hitting this in practice (faster/more consistent
+// scheduling than a browser Worker), but there's no real cost to the smaller value here either,
+// and no reason to leave this copy sitting on a constant already proven risky elsewhere.
 
 let rxQueue = [];
 function queueLine(text) {
@@ -509,10 +516,17 @@ function respawnParticle(p, energy) {
   // Launch mostly straight up out of the canister mouth, like a mortar shot — energy sets how
   // hard it fires, gravity (applied per-frame in animate()) bends the flight into a real arc
   // instead of a radial burst. Small lateral scatter so it isn't a single ruler-straight line.
-  var spread = 0.4 + energy * 0.9;
+  // No baseline anymore — per user request, matching the embedded preview: a genuinely idle
+  // channel (energy 0) launches nothing at all. But a plain linear scale from 0 made moderate
+  // real energy (~0.3-0.4, the typical range during real activity) nearly invisible at normal
+  // viewing scale — confirmed live via a full-canvas pixel scan on the embedded preview: particles
+  // genuinely were rendering, just too small/sparse to read as "alive." Switched to sqrt: still
+  // exactly 0 at energy 0, rises much faster at low-to-moderate energy.
+  var vis = Math.sqrt(energy);
+  var spread = vis * 1.7;
   var vx = (Math.random() - 0.5) * spread;
   var vz = (Math.random() - 0.5) * spread;
-  var vy = 2.4 + energy * 6.5 + Math.random() * 0.6;
+  var vy = vis * 8.0;
   pVel[p] = new THREE.Vector3(vx, vy, vz);
   pAge[p] = 0;
   pLife[p] = 0.7 + Math.random() * 1.0; // fades mid-arc/near-apex, the way real shell sparks burn out
@@ -654,12 +668,17 @@ function animate() {
   for (var i = 0; i < NUM; i++) avgEnergy += angleEnergy[i];
   avgEnergy = NUM ? (avgEnergy / NUM) : 0;
 
-  // emitter markers brighten with their own channel's real energy
+  // emitter markers brighten with their own channel's real energy — no baseline glow anymore
+  // (matches the embedded preview and the particle-launch fix above): at true zero energy the
+  // marker is fully dark, not a small decorative dot. sqrt curve for the same reason as the
+  // particle-launch fix above: linear-from-zero read as barely-different-from-idle at the
+  // moderate energy levels (~0.3-0.4) that real activity typically produces.
   for (var m = 0; m < NUM; m++) {
     var em = angleEnergy[m] * connectedSmooth;
-    var scale = 1 + em * 1.8;
+    var emVis = Math.sqrt(em);
+    var scale = 1 + emVis * 1.8;
     emitterMarkers[m].scale.setScalar(scale);
-    emitterMarkers[m].material.opacity = (0.35 + em * 0.65) * (0.4 + connectedSmooth * 0.6);
+    emitterMarkers[m].material.opacity = emVis * (0.4 + connectedSmooth * 0.6);
   }
 
   // particles: continuous respawn scaled by that channel's energy — always some drift even idle,
@@ -695,7 +714,9 @@ function animate() {
     positions[p * 3 + 1] += pVel[p].y * dt;
     positions[p * 3 + 2] += pVel[p].z * dt;
     var fade = Math.sin(Math.min(1, lifeT) * Math.PI); // ramps up then back down over its life
-    sizesAttr[p] = (1.6 + energyHere * 4.6) * fade + popFlash * 3.0;
+    // Same sqrt curve as respawnParticle above — energyHere=0 still means size=0, but moderate
+    // real energy now produces a clearly visible size instead of a near-invisible speck.
+    sizesAttr[p] = (Math.sqrt(energyHere) * 4.9) * fade + popFlash * 3.0;
   }
 
   // Trail echoes — a cheap comet tail: each echo eases toward its lead particle's current
