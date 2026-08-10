@@ -191,7 +191,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.37.0'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.39.2'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -327,6 +327,9 @@ const audioEngine = {
   stemsActive: false,
   stems: { vocals: null, drums: null, bass: null, other: null }, // lazily created per-stem state
   stemSyncTimer: 0, // periodic drift-correction accumulator — see updateStemsFrame
+  level: 0,          // instantaneous 0..1 input level, computed each frame in updateAudioFrame
+  levelSmooth: 0,    // eased version, drives the visible meter
+  silenceTimer: 0,   // seconds the smoothed level has stayed below the "is anything connected" threshold
 };
 
 /* ================= Hardware bridge (WebSerial -> Arduino servos) =================
@@ -899,7 +902,26 @@ function handlePortEdges(port, value, oldValue){
 }
 
 let ready = false;
-const SUBSTEP_CYCLES = 200, MAX_CATCHUP_SEC = 0.25, MHZ = 16e6;
+const SUBSTEP_CYCLES = 200, MAX_CATCHUP_SEC = 0.01, MHZ = 16e6;
+// MAX_CATCHUP_SEC was 0.25 — that let a single tick() call try to simulate up to 4,000,000 AVR
+// instructions in a row before returning. Confirmed live (via Claude in Chrome, injecting a
+// debug-introspection build of this exact source into a fresh isolated Worker) that this JS AVR
+// emulation cannot actually execute that many instructions in anything close to real time inside
+// a Worker: rxQueue was observed GROWING over real seconds even while usart.rxBusy sat false the
+// whole time, meaning tick() itself was only getting called roughly once every 400-600ms (each
+// call busy simulating its full catch-up allowance), not the intended ~4ms — so a queued serial
+// command line could take the better part of a minute to fully arrive, decoded servo angles
+// barely budged from their power-on 90° default, and the fireworks preview looked frozen
+// regardless of how much the real sphere field was actually doing. Cutting the per-call catch-up
+// allowance to 0.01s (25x smaller) makes each tick() call cheap enough to actually return
+// promptly, so setInterval(tick, 4) gets much closer to its real cadence and the byte-feed inside
+// the substep loop below gets far more real opportunities per second — confirmed live: with this
+// change, a full 8-servo command line drains from the queue and decodes correctly within ~1
+// second instead of never completing. (Tried moving the byte-feed check outside the substep loop
+// first, as a cleverer-looking fix — confirmed live that this was actually a regression: it cut
+// per-call feed opportunities from "many, once per substep" down to "one, no matter how many
+// substeps ran," which is worse the smaller MAX_CATCHUP_SEC gets. Left the feed check exactly
+// where it originally was, inside the loop; the real fix is just this constant.)
 let startWall = null;
 let postCounter = 0;
 const POST_EVERY_N_TICKS = 12; // tick runs every 4ms internally; post decoded angles back roughly every ~48ms (~20Hz), not every tick
@@ -1066,7 +1088,6 @@ let hwSim = null; // { THREE, scene, camera, renderer, container, count, current
 // to the embedded row layout instead of a ring, since the row is what the camera/view-toggle system
 // below is fit to.
 const HW_CANISTER_H = 0.24; // launch tube height — particles fire from its mouth, like a firework mortar
-const HW_IDLE_BOB_HZ = 0.55, HW_IDLE_BOB_AMPLITUDE = 0.015; // tiny idle shimmer on the opening ring, purely decorative
 const HW_GRAVITY = 3.1; // pulls launched particles into a real arc instead of a flat radial burst
 const HW_SPARK_THRESHOLD_DEG = 3; // how close to 0/180 counts as "hit the extreme"
 const HW_SPARK_DURATION = 0.4; // seconds
@@ -1238,17 +1259,20 @@ function ensureHwSimScene(){
   // v1.32.0 copied the main stage's exact ground color (0x0a0b0d) verbatim, but the main stage
   // has no tone mapping at all, while this scene's exposure was cut hard (down to 0.32 across
   // several rounds) to fix the particle white-blowout — the identical material renders at roughly
-  // a third the brightness here and was effectively invisible (confirmed live via Claude in
-  // Chrome: color alone, even boosted, stayed too dark under these lights). Fixed with a lighter
-  // matte color plus a small emissive term — independent of scene lighting/tone mapping, so it
-  // can't be dragged back down by any future exposure tuning done for the particle system.
+  // a third the brightness here. Tried `material.toneMapped = false` to decouple it from that
+  // exposure entirely — confirmed LIVE, via Claude in Chrome, that this does NOT actually work in
+  // this renderer/three.js combination: sampling the rendered pixel color directly (gl.readPixels)
+  // while sweeping toneMappingExposure showed the "detached" material's brightness still tracking
+  // exposure exactly like everything else. Rather than fight that, embraced it: emissiveIntensity
+  // tuned live against the REAL exposure (0.32) until the color sampled correctly, landing on 5.0.
+  // This means the ground genuinely is coupled to exposure — if that number moves again for the
+  // particle system, re-check this value the same way (sample a pixel, don't just eyeball it).
   const groundSize = Math.max(requiredWidth, requiredHeight) * 2.2;
   const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
   const groundMat = new THREE.MeshStandardMaterial({
     color: 0x14161a, metalness: 0.15, roughness: 0.9,
-    emissive: 0x22262e, emissiveIntensity: 1.0,
+    emissive: 0x22262e, emissiveIntensity: 5.0,
   });
-  groundMat.toneMapped = false;
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.02;
@@ -1329,10 +1353,18 @@ function ensureHwSimScene(){
     // Launch mostly straight up, like a mortar shot — energy sets how hard it fires, gravity
     // (applied per-frame in updateHwSimulator) bends the flight into a real arc rather than a
     // radial burst. Small lateral scatter so it doesn't look like a single ruler-straight line.
-    const spread = 0.25 + energy * 0.5;
+    // No baseline anymore — per user request, a genuinely idle channel (energy 0) launches
+    // nothing at all. But a plain linear scale from 0 made moderate real energy (~0.3-0.4, which
+    // turned out to be the typical range during real Ambient/Audio activity) look nearly invisible
+    // at normal viewing scale — confirmed live via a full-canvas pixel scan: particles genuinely
+    // were rendering, just too small/sparse to read as "alive." Switched to a sqrt curve: still
+    // exactly 0 at energy 0, but rises much faster at low-to-moderate energy (sqrt(0.4)≈0.63) so
+    // real activity reads clearly without needing to peg near 1.0 first.
+    const vis = Math.sqrt(energy);
+    const spread = vis * 0.9;
     const vx = (Math.random() - 0.5) * spread;
     const vz = (Math.random() - 0.5) * spread;
-    const vy = 1.6 + energy * 3.3 + Math.random() * 0.4;
+    const vy = vis * 6.2;
     pVel[p] = new THREE.Vector3(vx, vy, vz);
     pAge[p] = 0;
     pLife[p] = 0.7 + Math.random() * 0.9; // fades mid-arc/near-apex, the way real shell sparks burn out
@@ -1468,7 +1500,6 @@ function updateHwSimulator(now, dt){
 
   const maxStep = HW_SERVO_SLEW_DEG_PER_SEC * dt; // real servos can't snap instantly to a new angle
   const moodMul = hardwareEngine.connected ? 1.4 : 1.0; // perk up when an actual rig/bridge is connected
-  const tSec = now / 1000;
   // Real beat-onset signal, already computed for the main field's shimmer (audioEngine.beatPulse) —
   // reused here as a shared burst boost across every emitter on every detected beat. Only active
   // in Audio mode; 0 otherwise, so it never fakes motion when there's no real beat to react to.
@@ -1505,10 +1536,13 @@ function updateHwSimulator(now, dt){
 
     const energy = Math.min(1, hwSim.emitterEnergy[i] * moodMul + flash * 0.8);
 
-    // Marker glow + gentle idle float — real-data brightness, decorative float
+    // Marker glow scales purely with real deviation — at energy 0 it's fully dark and static,
+    // no time-based idle bob anymore (removed per user request: an idle channel should show
+    // nothing until there's real activity, not a small decorative shimmer). Ring scale uses the
+    // same sqrt curve as the particles below, for the same reason: linear-from-zero made moderate
+    // real energy look barely different from idle.
     hwSim.markerMats[i].emissiveIntensity = deviation * 0.9 + flash * 1.4;
-    const shimmer = 1 + Math.sin(tSec * HW_IDLE_BOB_HZ * Math.PI * 2 + i * 0.5) * HW_IDLE_BOB_AMPLITUDE;
-    hwSim.emitterMarkers[i].scale.setScalar((1 + energy * 0.6) * shimmer); // opening ring widens with real activity
+    hwSim.emitterMarkers[i].scale.setScalar(1 + Math.sqrt(energy) * 0.7);
 
     // Continuous respawn scaled by this channel's energy — always some launches even idle, never
     // a fully dead canister (same "no dead zone" principle as the main app's turbulence/speed fix).
@@ -1542,7 +1576,10 @@ function updateHwSimulator(now, dt){
       hwSim.positions[p * 3 + 1] += hwSim.pVel[p].y * dt;
       hwSim.positions[p * 3 + 2] += hwSim.pVel[p].z * dt;
       const fade = Math.sin(Math.min(1, lifeT) * Math.PI);
-      hwSim.sizesAttr[p] = (0.85 + energy * 1.7) * fade + popFlash * 1.8;
+      // Same sqrt curve as the velocity above — energy=0 still means size=0 (nothing renders when
+      // truly idle), but moderate real energy now produces a clearly visible size instead of a
+      // faint speck.
+      hwSim.sizesAttr[p] = (Math.sqrt(energy) * 3.6) * fade + popFlash * 1.8;
     }
     avgEnergy += energy;
   }
@@ -1604,6 +1641,11 @@ function disconnectAudioSource(){
   }
   audioEngine.active = false;
   if(audioEngine.sourceKind !== 'stems') audioEngine.sourceKind = null;
+  audioEngine.level = 0; audioEngine.levelSmooth = 0; audioEngine.silenceTimer = 0;
+  const meter = document.getElementById('audioLevelMeter');
+  if(meter) meter.style.width = '0%';
+  const warning = document.getElementById('audioSilenceWarning');
+  if(warning) warning.style.display = 'none';
 }
 
 function disconnectStems(){
@@ -1660,6 +1702,67 @@ async function startMic(){
   } catch(e){
     toast('Microphone access denied or unavailable');
   }
+}
+
+/* --- YouTube embed: plays the video for visuals; audio-reactivity still runs through the mic
+   path above, since a cross-origin iframe's audio isn't readable by the Web Audio API. Starting
+   playback here auto-starts the mic listener as a convenience — it still needs the user's actual
+   system audio routed into a mic input (loopback/virtual cable) to pick up the video's sound. --- */
+let youtubePlayer = null;
+let youtubeApiLoading = null;
+
+function extractYouTubeId(url){
+  try {
+    const u = new URL(url.trim());
+    if(u.hostname.includes('youtu.be')) return u.pathname.slice(1).split('/')[0] || null;
+    if(u.hostname.includes('youtube.com')){
+      if(u.pathname === '/watch') return u.searchParams.get('v');
+      const embedMatch = u.pathname.match(/\/(embed|shorts|live)\/([^/?]+)/);
+      if(embedMatch) return embedMatch[2];
+    }
+  } catch(e){ /* not a valid URL */ }
+  return null;
+}
+
+function loadYouTubeIframeApi(){
+  if(window.YT && window.YT.Player) return Promise.resolve();
+  if(youtubeApiLoading) return youtubeApiLoading;
+  youtubeApiLoading = new Promise((resolve, reject) => {
+    window.onYouTubeIframeAPIReady = resolve;
+    const s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = () => reject(new Error('Failed to load YouTube API'));
+    document.head.appendChild(s);
+  });
+  return youtubeApiLoading;
+}
+
+async function loadYouTubeVideo(videoId){
+  try {
+    await loadYouTubeIframeApi();
+  } catch(e){
+    toast('Could not load the YouTube player (offline, or the CDN is blocked)');
+    return;
+  }
+  document.getElementById('youtubePlayerWrap').style.display = 'block';
+  if(youtubePlayer){
+    youtubePlayer.loadVideoById(videoId);
+    return;
+  }
+  youtubePlayer = new YT.Player('youtubePlayer', {
+    videoId,
+    playerVars: { rel: 0 },
+    events: {
+      onStateChange: (e) => {
+        // 1 = playing. Auto-start the mic so there's *something* to analyze, but only if nothing
+        // else is already the active source — don't steal an uploaded file the person is using.
+        if(e.data === 1 && (!audioEngine.active || audioEngine.sourceKind === null)){
+          startMic();
+          toast('Mic listening — route your system audio into it (Stereo Mix / virtual cable) for real reactivity');
+        }
+      }
+    }
+  });
 }
 
 /* --- Stem files (already separated by an external tool — see STEM_KEYS note above) --- */
@@ -1751,6 +1854,14 @@ function updateStemsFrame(dt){
   STEM_KEYS.forEach(key => {
     const s = audioEngine.stems[key];
     if(!s) return;
+    // Same fix as updateAudioFrame: a paused stem's analyser still holds its last FFT window
+    // rather than resetting, so read it as stale and decay toward silence instead.
+    if(s.audioEl && s.audioEl.paused){
+      const decay = Math.exp(-dt * 6);
+      s.energy *= decay;
+      for(let c = 0; c < s.colEnergy.length; c++) s.colEnergy[c] *= decay;
+      return;
+    }
     s.analyser.getByteFrequencyData(s.freqData);
     let sum = 0;
     for(let i = 0; i < s.freqData.length; i++) sum += s.freqData[i];
@@ -1794,8 +1905,34 @@ function updateStemsFrame(dt){
 function updateAudioFrame(dt){
   if(audioEngine.stemsActive){ updateStemsFrame(dt); return; }
   if(!audioEngine.active || !audioEngine.analyser) return;
+
+  // A file-backed source can be paused (Stop or Pause) while audioEngine.active stays true — the
+  // analyser node doesn't reset itself once its source stops feeding new samples, it just holds
+  // whatever was in its last FFT window. Left unchecked, that meant reading it after pausing kept
+  // returning the same "real" activity indefinitely — confirmed by direct user report: the
+  // fireworks kept doing exactly what they were doing before, even after stopping the music.
+  // Detect a paused file source and explicitly decay toward silence instead of reading stale,
+  // frozen analyser data — smooth rather than an abrupt cut, and it naturally covers both Pause
+  // and Stop (and a track simply reaching its end) without needing to special-case each button.
+  if(audioEngine.audioEl && audioEngine.audioEl.paused){
+    const decay = Math.exp(-dt * 6);
+    audioEngine.level *= decay;
+    audioEngine.levelSmooth *= decay;
+    audioEngine.bassEMA *= decay;
+    audioEngine.beatPulse *= decay;
+    for(let c = 0; c < audioEngine.colEnergy.length; c++) audioEngine.colEnergy[c] *= decay;
+    return;
+  }
+
   const analyser = audioEngine.analyser, data = audioEngine.freqData;
   analyser.getByteFrequencyData(data);
+
+  // Overall input level (not just bass) — drives the visible meter and silence detection, so
+  // "is this actually connected" is something the person can see, not just infer from a toast.
+  let levelSum = 0;
+  for(let k = 0; k < data.length; k++) levelSum += data[k];
+  audioEngine.level = (levelSum / data.length) / 255;
+  audioEngine.levelSmooth += (audioEngine.level - audioEngine.levelSmooth) * 0.15;
 
   // Bass energy drives beat detection (kick/bass tends to carry the beat).
   let bassSum = 0;
@@ -1811,6 +1948,20 @@ function updateAudioFrame(dt){
   audioEngine.beatPulse *= Math.exp(-dt * 7);
 
   accumulateColEnergy(data, audioEngine.colEnergy, dt);
+}
+
+function updateAudioLevelUi(dt){
+  const meter = document.getElementById('audioLevelMeter');
+  if(!meter) return;
+  // *140 rather than *100 so a normal, healthy input level reads as most of the bar, not a
+  // sliver — the point is a person can glance at it and tell "yes, this is picking something up."
+  meter.style.width = Math.min(100, Math.round(audioEngine.levelSmooth * 140)) + '%';
+
+  const SILENCE_THRESHOLD = 0.03, SILENCE_WARNING_AFTER = 4; // seconds
+  if(audioEngine.active && audioEngine.levelSmooth < SILENCE_THRESHOLD) audioEngine.silenceTimer += dt;
+  else audioEngine.silenceTimer = 0;
+  const warning = document.getElementById('audioSilenceWarning');
+  if(warning) warning.style.display = (audioEngine.silenceTimer > SILENCE_WARNING_AFTER) ? 'flex' : 'none';
 }
 
 function initEngineIfNeeded(){
@@ -2094,7 +2245,10 @@ function tick(now){
 
   updateHwSimulator(now, dt);
   if(engine.mode === 'ambient') updateAmbient(dt * engine.speed);
-  if(engine.mode === 'audio') updateAudioFrame(dt);
+  if(engine.mode === 'audio'){
+    updateAudioFrame(dt);
+    updateAudioLevelUi(dt);
+  }
 
   const { THREE, categoryMeshes, dummy, camera, renderer, scene, controls } = three;
   const t = now * 0.001 * engine.speed;
@@ -2251,8 +2405,28 @@ function renderHome(){
           <button class="btn secondary" id="audioStopBtn">Stop</button>
           <button class="btn secondary" id="audioForwardBtn" title="Forward 10s">10s ⏩</button>
         </div>
-        <div class="row" style="margin-top:8px;">
+        <div class="row" style="margin-top:8px; align-items:center;">
           <span class="sliderVal" id="audioStatus" style="width:auto; text-align:left;">No audio source connected.</span>
+          <div style="display:flex; align-items:center; gap:6px;" title="Live input level from the active audio source — proof it's actually reaching the analyser, not just that a source is 'connected'">
+            <span style="font-size:11px; color:var(--ink-soft);">Input level</span>
+            <div style="width:80px; height:6px; background:var(--paper-deep); border:1px solid var(--line); border-radius:3px; overflow:hidden;">
+              <div id="audioLevelMeter" style="width:0%; height:100%; background:var(--accent); transition:width 80ms linear;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="row" id="audioSilenceWarning" style="display:none; margin-top:4px;">
+          <span class="sliderVal" style="width:auto; text-align:left; color:#F0A868;">Input level has stayed near zero for a while — if you're expecting a YouTube video (or anything else) to drive this, your system audio probably isn't actually routed into the mic yet. See the note above about loopback / a virtual audio cable.</span>
+        </div>
+
+        <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:8px;">
+          <div class="label">Or embed a YouTube video — plays the video here, and starts the microphone to listen for whatever your speakers are playing. Real reactivity needs your computer's own audio routed to a mic input (e.g. Windows "Stereo Mix" or a virtual audio cable) — the browser can't read a YouTube iframe's audio directly, cross-origin.</div>
+          <div class="row" style="margin-top:0;">
+            <input id="youtubeUrlInput" type="text" placeholder="Paste a YouTube URL" style="flex:1; min-width:200px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
+            <button class="btn secondary" id="youtubeLoadBtn">Load video</button>
+          </div>
+          <div id="youtubePlayerWrap" style="display:none; margin-top:10px; position:relative; width:100%; aspect-ratio:16/9; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);">
+            <div id="youtubePlayer" style="width:100%; height:100%;"></div>
+          </div>
         </div>
 
         <div class="row" style="margin-top:14px; border-top:1px solid var(--line); padding-top:12px;">
@@ -2448,6 +2622,12 @@ function renderHome(){
     disconnectAudioSource();
     document.getElementById('audioStatus').textContent = 'No audio source connected.';
     document.getElementById('micStopBtn').style.display = 'none';
+  };
+  document.getElementById('youtubeLoadBtn').onclick = ()=>{
+    const url = document.getElementById('youtubeUrlInput').value;
+    const id = extractYouTubeId(url);
+    if(!id){ toast('Could not read a video ID from that URL'); return; }
+    loadYouTubeVideo(id);
   };
   document.getElementById('audioRewindBtn').onclick = ()=>{
     if(audioEngine.audioEl) audioEngine.audioEl.currentTime = Math.max(0, audioEngine.audioEl.currentTime - 10);
