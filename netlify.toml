@@ -1,0 +1,33 @@
+# Netlify deploy config for MURMUR.
+#
+# No [build] command: this is a single static HTML file with no bundler, framework, or build
+# step (see README) — index.html, vendor/, murmur_servo/, and hardware-bridge.js are deployed
+# exactly as checked into the repo. audit_deploy.js is a separate, LOCAL-only pre-ship check
+# (`node audit_deploy.js`, run by hand before pushing) — it doesn't run here and shouldn't;
+# Netlify's build environment has no reason to have Node/npm set up for it.
+
+[build]
+  publish = "."
+
+# vendor/three.module.js and vendor/OrbitControls.js (see CHANGELOG v1.39.9) are pinned to a
+# specific upstream Three.js version and only change on a deliberate, deliberate-and-rare
+# upgrade — and any such upgrade is itself a new commit, which triggers a brand-new Netlify
+# deploy with its own fresh CDN cache scope. So aggressive, long-lived caching here is safe: a
+# stale vendor/ file can only exist if a NEW deploy didn't actually update it, which would be a
+# real bug on its own, not something caching should paper over either way.
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# index.html changes with essentially every real update to the project — always revalidate
+# rather than risk a visitor stuck on a stale version after a fix ships.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

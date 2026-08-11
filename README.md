@@ -2,16 +2,30 @@
 
 A field of 968 kinetic spheres that drift through noise and resolve into text or shapes, like a starling murmuration finding and losing form — inspired by ART+COM's BMW Kinetic Sculpture at the BMW Museum.
 
-Live: (add Netlify URL once deployed)
+Live: [murmurv1.netlify.app](https://murmurv1.netlify.app)
 
 <!-- Demo GIF/video goes here once captured. Suggested: ~15-20s, ambient mode, showing the
-     chaos → shape → chaos cycle at least once, then (optional second clip) the "Show simulated
-     rig" fireworks preview firing during Audio mode. Screen-record at whatever resolution your
-     capture tool defaults to, convert to a GIF (or use an MP4/WebM — GitHub renders both inline)
-     under ~10MB so it loads fast, and reference it here as:
+     chaos → shape → chaos cycle at least once, then (optional second clip) Audio mode with
+     stems loaded and one Soloed. Screen-record at whatever resolution your capture tool
+     defaults to, convert to a GIF (or use an MP4/WebM — GitHub renders both inline) under
+     ~10MB so it loads fast, and reference it here as:
      ![MURMUR demo](./demo.gif) -->
 
-Ambient mode loops indefinitely: chaos → a shape (text, circle, car profile, skyline, blob) → chaos. Manual mode lets you type your own text or pick a preset and scramble back to chaos on demand. Built with Three.js, single HTML file, no build step.
+Three modes, one shared field of spheres:
+
+- **Ambient loop** — auto-cycles indefinitely: chaos → a shape (text or a preset) → chaos, forever. The default, no interaction required.
+- **Manual** — type your own word (up to 12 characters) and resolve into it, or pick a preset (circle, car profile, skyline, blob). Scramble sends it back to chaos on demand.
+- **Audio** — upload a file or use your microphone, and the field becomes a live equalizer: bass on the left, treble on the right, with a beat detector driving a shimmer pulse across the grid. Drop in up to 4 pre-separated stems (Vocals/Drums/Bass/Other — get them from [Moises](https://moises.ai), free and no install) instead of one mixed file, and each sphere colors toward whichever stem is loudest at that column right now. **Solo** any stem in the legend to isolate it while listening — the others keep playing silently underneath, so nothing drifts out of sync, and the visualization keeps reacting to all four regardless of which one's soloed.
+
+Speed and Turbulence sliders shape the motion in every mode. **Share** (top-right of the 3D view) copies a link that reproduces the current mode, shape, speed, and turbulence. **Record** captures the view as a downloadable video clip.
+
+## Physical rig (optional)
+
+MURMUR can drive a real row of hobby servos over WebSerial (Chrome/Edge, desktop only) — whatever's on screen gets mirrored to the servos live, and the loop can run the other way too: wire a potentiometer or photoresistor and a physical knob or light level can drive Turbulence or Speed instead. No hardware yet? "Show simulated rig" gives a 3D preview — launch canisters firing particles firework-mortar style, driven by that servo's real angle — running MURMUR's actual compiled firmware in-browser via [avr8js](https://github.com/wokwi/avr8js), no install required. See `murmur_servo/AVR8JS_SETUP.md` for the paired Arduino sketch, wiring notes, and the standalone bridge script if you want a separate dashboard window.
+
+## Built with
+
+Three.js, vanilla JS, single HTML file, no build step, no framework. `vendor/` holds the two Three.js files fetched on every page load, self-hosted for load-time reasons (see CHANGELOG v1.39.9); everything else loads on demand only if you use it.
 
 ## Acknowledgments
 
