@@ -89,12 +89,3 @@ The `murmur_servo/` folder's fixed 8-servo firmware (`NUM_SERVOS`/
 `SERVO_PINS` in the `.ino`) is what both the embedded preview and this
 dashboard always mirror — independent of MURMUR's "servo count" field,
 which only controls how many angles go out to real/external hardware.
-
-## If you want to see the physical wiring layout too
-
-Neither simulator renders a board — just abstract stick figures/arms.
-MURMUR doesn't have an in-app view of the physical wiring either — if
-you want that, build the wiring yourself in a Wokwi project (paste
-`murmur_servo.ino` into a new Arduino Uno project at wokwi.com and wire
-up 8 servos on pins 2-9) and keep that tab open alongside whichever
-simulator you're using.
