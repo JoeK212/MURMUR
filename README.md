@@ -17,7 +17,7 @@ Ambient mode loops indefinitely: chaos → a shape (text, circle, car profile, s
 
 MURMUR is built on these open-source projects:
 
-- [Three.js](https://threejs.org) (MIT) — all 3D rendering, both the kinetic sphere field and the simulated servo rig previews.
+- [Three.js](https://threejs.org) (MIT) — all 3D rendering, both the kinetic sphere field and the simulated servo rig previews. `three.module.js` and `OrbitControls.js` are vendored locally under `vendor/` (self-hosted to cut connection-setup latency on the critical load path — see CHANGELOG v1.39.9); everything else Three.js-related (bloom postprocessing, the sim rig's own controls) still loads from unpkg on demand.
 - [avr8js](https://github.com/wokwi/avr8js) (MIT) by Wokwi — runs the real compiled `murmur_servo.ino` firmware directly, in-browser (via the embedded preview's Web Worker) and in the standalone `avr8js_sim_bridge.js` bridge script, rather than approximating servo behavior.
 - [ws](https://github.com/websockets/ws) (MIT) — the WebSocket server behind `avr8js_sim_bridge.js`'s live bridge and dashboard.
 

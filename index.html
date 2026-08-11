@@ -180,10 +180,22 @@
 <footer class="foot" id="footVersion"></footer>
 <div class="toast" id="toast"></div>
 
+<!-- Real Slow-4G test (Incognito, extensions/cache excluded) found the eager, every-page-load
+     imports below ('three' + OrbitControls, both fetched unconditionally from loadThree()) taking
+     20+ seconds — not from payload size, but from the extra DNS+TCP+TLS round trips to spin up a
+     connection to a different origin (unpkg) before a single byte of the actual file could move.
+     Self-hosting just those two exact specifiers (vendor/, checked in) removes that origin hop
+     entirely, since the browser already has a connection open to this page's own origin. The
+     lazy, opt-in-only imports (bloom's postprocessing modules, the sim rig's own OrbitControls
+     copy — all only fetched if someone checks "Show simulated rig") are left on the "three/addons/"
+     CDN prefix on purpose: they're outside the critical path, so the extra origin cost doesn't
+     matter there, and self-hosting the whole examples/jsm tree for the sake of two rarely-used
+     files isn't worth the repo weight. -->
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three": "./vendor/three.module.js",
+    "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
     "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
     "avr8js": "https://cdn.jsdelivr.net/npm/avr8js@0.21.0/+esm"
   }
@@ -191,7 +203,7 @@
 </script>
 
 <script>
-const APP_VERSION = '1.39.2'; // keep in sync with CHANGELOG.md top entry and the footer tag below
+const APP_VERSION = '1.39.9'; // keep in sync with CHANGELOG.md top entry and the footer tag below
 
 /* ================= Toast ================= */
 let toastTimer = null;
@@ -233,7 +245,7 @@ function showHelp(){
       <p style="font-size:13px; color:var(--ink-soft); margin:0 0 18px;">A field of kinetic spheres, inspired by ART+COM's BMW Kinetic Sculpture.</p>
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Camera</h3>
-      <p style="font-size:14px; line-height:1.5; margin:0;">Drag to orbit, scroll to zoom. "Auto-rotate" toggles the slow ambient spin.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;">Drag to orbit, scroll to zoom. "Auto-rotate" toggles the slow ambient spin. "Share" (top-right of the 3D view) copies a link that reproduces the current mode, shape, speed, and turbulence — open it fresh to land back on the same look (Audio mode's actual sound can't travel through a link, so a shared audio-mode link just opens to the Audio panel ready for a source). "● Record" captures the 3D view as a downloadable video clip — click again to stop and save.</p>
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Ambient loop</h3>
       <p style="font-size:14px; line-height:1.5; margin:0;">Auto-cycles chaos → a shape (text or a preset) → chaos, forever. Speed and Turbulence sliders shape the motion in every mode.</p>
@@ -243,13 +255,12 @@ function showHelp(){
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Audio</h3>
       <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Upload a file or use your microphone. The field becomes a live equalizer — bass on the left, treble on the right — with a beat detector driving a shimmer pulse across the whole grid. Rewind/play-pause/stop/forward controls appear once a source is connected (the mic gets a "Stop microphone" button instead, since there's nothing to seek on a live stream).</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;"><strong>Stems:</strong> MURMUR doesn't separate a mixed song itself — that needs a trained model. Run your track through <a href="https://github.com/facebookresearch/demucs" target="_blank" rel="noopener">Demucs</a> (free, command-line), <a href="https://www.lalal.ai/stem-splitter/" target="_blank" rel="noopener">LALAL.AI</a>, or <a href="https://moises.ai" target="_blank" rel="noopener">Moises</a> first, then upload the resulting Vocals/Drums/Bass/Other files. Each sphere colors toward whichever stem is loudest at that column right now; the legend shows which color is which. The same transport controls move all loaded stems together, kept in sync.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;"><strong>Stems:</strong> MURMUR doesn't separate a mixed song itself — that needs a trained model. Easiest is a browser tool: <a href="https://moises.ai" target="_blank" rel="noopener">Moises</a> (recommended — free tier, no install) or <a href="https://www.lalal.ai/stem-splitter/" target="_blank" rel="noopener">LALAL.AI</a>. If you'd rather run it yourself, <a href="https://github.com/facebookresearch/demucs" target="_blank" rel="noopener">Demucs</a> is free and local but command-line. Any of the three works — drag all the separated files onto the dashed drop zone at once (matched by filename — "Vocals", "Drums", etc.) or upload them one at a time with the buttons underneath. Each sphere colors toward whichever stem is loudest at that column right now; the legend shows which color is which. The same transport controls move all loaded stems together, kept in sync — "Solo" next to a stem in the legend isolates just that one to listen to (click again to bring the others back); the others keep playing silently underneath, so nothing drifts out of sync and the visualization keeps reacting to all four regardless of which one's soloed.</p>
 
       <h3 style="font-size:14px; margin:16px 0 6px;">Physical rig (optional)</h3>
-      <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>arduino/murmur_servo/murmur_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0;">No hardware yet? Check "Show simulated rig" for a literal 3D preview — a row of launch canisters, each firing particles upward like a firework mortar, launch speed and arc height driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets. It's driven by MURMUR's real firmware itself (avr8js, embedded in this page — no terminal, no install), each canister's launch measured off real simulated PWM rather than mirrored from what's on screen, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it.</p>
-      <p style="font-size:14px; line-height:1.5; margin:0 0 0 0; margin-top:8px;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
-      <p style="font-size:14px; line-height:1.5; margin:8px 0 0;"><strong>Simulated rig:</strong> check "Show simulated rig" — it has its own panel now, no hardware needed for it — for a 3D preview: a row of launch canisters firing particles upward, firework-mortar style, driven by that servo's real angle. Drag to orbit, scroll to zoom, and toggle "Auto-rotate" or snap between side/angled presets — same camera controls as the main stage above. This now runs MURMUR's actual compiled firmware (avr8js, github.com/wokwi/avr8js) directly in this browser tab — no terminal, no Node.js, no install; each canister's launch is measured off real simulated PWM, not mirrored from on-screen state. If that fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see AVR8JS_SETUP.md.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0 0 8px;">Drives a real row of hobby servos over WebSerial — Chrome or Edge on desktop only, not supported in Firefox/Safari or on mobile. Whatever's on screen (any mode) gets mirrored to the servos live. Set the servo count to match your build, click Connect Arduino, and pick the port. The paired sketch is <code>murmur_servo/murmur_servo.ino</code> — see the comments at the top of that file for wiring and power notes (servos need their own power supply once you're past 1-2 of them, not the Arduino's 5V/USB). The WebSerial connection itself lives in <code>hardware-bridge.js</code>, a small shared module — the same rig can be driven by other tools in the generative-design-tools suite without re-wiring the connection logic each time.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0 0 8px;"><strong>No hardware yet?</strong> Check "Show simulated rig" — it has its own panel, no hardware needed — for a 3D preview: a row of launch canisters firing particles upward, firework-mortar style, launch speed and arc height driven by that servo's real angle. Drag to orbit, scroll to zoom, toggle "Auto-rotate," or snap between side/angled presets — same camera controls as the main stage above. It runs MURMUR's actual compiled firmware directly in this browser tab (avr8js, github.com/wokwi/avr8js — no terminal, no Node.js, no install), each canister's launch measured off real simulated PWM rather than mirrored from on-screen state, then slew-rate-limited to a realistic servo speed (~300°/s) so you can tell if something's moving too fast for real hardware before you build it. If avr8js fails to load (offline, CDN blocked), it falls back to a direct preview automatically rather than breaking. The external <code>avr8js_sim_bridge.js</code> script and its own browser dashboard (<code>http://localhost:8766</code>) still work too, if you want a separate window or a <code>ws://</code> endpoint other tools can connect to — see <code>murmur_servo/AVR8JS_SETUP.md</code>.</p>
+      <p style="font-size:14px; line-height:1.5; margin:0;"><strong>Sensor input:</strong> the loop can run the other way too. Wire a potentiometer or photoresistor to the Arduino (see the sketch's comments for wiring), set "Sensor drives" to Turbulence or Speed, and a physical knob or light level controls what's on screen live — the corresponding slider moves to match. Set it to Off to ignore incoming readings.</p>
 
       <div class="confirm-actions" style="margin-top:20px;">
         <button class="btn accent" id="helpClose">Got it</button>
@@ -286,19 +297,22 @@ const engine = {
   ambientPhase: 'chaos', // 'chaos' -> 'hold-chaos' -> 'resolving' -> 'hold-shape' -> 'unresolving'
   ambientPresetIdx: 0,
   ready: false,
+  manualSpec: null, // last thing explicitly resolved in Manual mode ({type:'text',text} / {type:'preset',preset} / {type:'chaos'}) — used to build a share link
 };
 
 const GRID_COLS = 44;
 const GRID_ROWS = 22;
 const SPHERE_COUNT = GRID_COLS * GRID_ROWS;
 const AMBIENT_PRESETS = ['circle','car','skyline','blob','text'];
+const MANUAL_PRESET_KEYS = ['circle','car','skyline','blob']; // the actual preset-btn values in Manual mode — AMBIENT_PRESETS also carries the pseudo-preset 'text' (meaning "resolve the word MURMUR"), which isn't a real rasterizePreset() case
 const PEAK_HEIGHT = 3.2; // shared resolve/audio height scale, spheres-per-unit-Y
 
 let three = null; // holds { THREE, scene, camera, renderer, controls, categoryMeshes, dummy, ... }
 
 /* ================= Stem coloring =================
-   MURMUR does not separate a mixed song itself — that needs a trained model
-   (Demucs, etc.) run externally. It accepts up to 4 already-separated stem
+   MURMUR does not separate a mixed song itself — that needs a trained model.
+   Moises (moises.ai) is the recommended no-install route; Demucs/LALAL.AI also work.
+   It accepts up to 4 already-separated stem
    files and colors each sphere by whichever stem is driving its height most. */
 const STEM_KEYS = ['vocals', 'drums', 'bass', 'other'];
 const STEM_LABELS = { vocals: 'Vocals', drums: 'Drums', bass: 'Bass', other: 'Other / guitar' };
@@ -326,6 +340,7 @@ const audioEngine = {
   colEnergy: new Float32Array(GRID_COLS),
   stemsActive: false,
   stems: { vocals: null, drums: null, bass: null, other: null }, // lazily created per-stem state
+  soloedStem: null, // which stem key (if any) is currently isolated — see setStemSolo()
   stemSyncTimer: 0, // periodic drift-correction accumulator — see updateStemsFrame
   level: 0,          // instantaneous 0..1 input level, computed each frame in updateAudioFrame
   levelSmooth: 0,    // eased version, drives the visible meter
@@ -1068,9 +1083,21 @@ function computeServoAngles(){
     else hwAgcMax[b] = Math.max(avg, hwAgcMax[b] - fallStep);
     if(avg < hwAgcMin[b]) hwAgcMin[b] += (avg - hwAgcMin[b]) * HW_AGC_RISE;
     else hwAgcMin[b] = Math.min(avg, hwAgcMin[b] + fallStep);
-    const span = Math.max(0.5, hwAgcMax[b] - hwAgcMin[b]); // floor on span so near-silence doesn't get amplified into noise
 
-    angles[b] = Math.round(mapRange(avg, hwAgcMin[b], hwAgcMin[b] + span, HW_ANGLE_MIN, HW_ANGLE_MAX));
+    // Window is centered on the tracked range's own midpoint, not anchored at hwAgcMin. With the
+    // old `mapRange(avg, hwAgcMin, hwAgcMin+span, ...)` anchoring, once the signal goes truly flat
+    // (silence, or idle with no wobble left post-v1.39.0) both bounds converge onto avg and the
+    // 0.5 floor below then pinned avg to the very BOTTOM of the substituted window every time —
+    // mapping flat/silent input to HW_ANGLE_MIN (a full-scale extreme, deviation~0.78) forever,
+    // never to neutral 90. That's the root of "rig shows activity with nothing playing": AGC
+    // silence didn't mean "angle at rest," it meant "angle locked at an extreme." Centering the
+    // substituted window on the range's midpoint instead means a converged/flat avg sits at the
+    // window's center → maps to 90 (true neutral, zero deviation) — while leaving every non-flat,
+    // real-dynamic-range case identical to before (mid ± span/2 == hwAgcMin..hwAgcMax exactly when
+    // span isn't floored).
+    const mid = (hwAgcMin[b] + hwAgcMax[b]) / 2;
+    const span = Math.max(0.5, hwAgcMax[b] - hwAgcMin[b]); // floor on span so near-silence doesn't get amplified into noise
+    angles[b] = Math.round(mapRange(avg, mid - span / 2, mid + span / 2, HW_ANGLE_MIN, HW_ANGLE_MAX));
   }
   return angles;
 }
@@ -1656,6 +1683,7 @@ function disconnectStems(){
     s.audioEl.pause();
   });
   audioEngine.stemsActive = false;
+  audioEngine.soloedStem = null;
   if(audioEngine.sourceKind === 'stems') audioEngine.sourceKind = null;
 }
 
@@ -1704,67 +1732,6 @@ async function startMic(){
   }
 }
 
-/* --- YouTube embed: plays the video for visuals; audio-reactivity still runs through the mic
-   path above, since a cross-origin iframe's audio isn't readable by the Web Audio API. Starting
-   playback here auto-starts the mic listener as a convenience — it still needs the user's actual
-   system audio routed into a mic input (loopback/virtual cable) to pick up the video's sound. --- */
-let youtubePlayer = null;
-let youtubeApiLoading = null;
-
-function extractYouTubeId(url){
-  try {
-    const u = new URL(url.trim());
-    if(u.hostname.includes('youtu.be')) return u.pathname.slice(1).split('/')[0] || null;
-    if(u.hostname.includes('youtube.com')){
-      if(u.pathname === '/watch') return u.searchParams.get('v');
-      const embedMatch = u.pathname.match(/\/(embed|shorts|live)\/([^/?]+)/);
-      if(embedMatch) return embedMatch[2];
-    }
-  } catch(e){ /* not a valid URL */ }
-  return null;
-}
-
-function loadYouTubeIframeApi(){
-  if(window.YT && window.YT.Player) return Promise.resolve();
-  if(youtubeApiLoading) return youtubeApiLoading;
-  youtubeApiLoading = new Promise((resolve, reject) => {
-    window.onYouTubeIframeAPIReady = resolve;
-    const s = document.createElement('script');
-    s.src = 'https://www.youtube.com/iframe_api';
-    s.onerror = () => reject(new Error('Failed to load YouTube API'));
-    document.head.appendChild(s);
-  });
-  return youtubeApiLoading;
-}
-
-async function loadYouTubeVideo(videoId){
-  try {
-    await loadYouTubeIframeApi();
-  } catch(e){
-    toast('Could not load the YouTube player (offline, or the CDN is blocked)');
-    return;
-  }
-  document.getElementById('youtubePlayerWrap').style.display = 'block';
-  if(youtubePlayer){
-    youtubePlayer.loadVideoById(videoId);
-    return;
-  }
-  youtubePlayer = new YT.Player('youtubePlayer', {
-    videoId,
-    playerVars: { rel: 0 },
-    events: {
-      onStateChange: (e) => {
-        // 1 = playing. Auto-start the mic so there's *something* to analyze, but only if nothing
-        // else is already the active source — don't steal an uploaded file the person is using.
-        if(e.data === 1 && (!audioEngine.active || audioEngine.sourceKind === null)){
-          startMic();
-          toast('Mic listening — route your system audio into it (Stereo Mix / virtual cable) for real reactivity');
-        }
-      }
-    }
-  });
-}
-
 /* --- Stem files (already separated by an external tool — see STEM_KEYS note above) --- */
 async function loadStemFile(stemKey, file){
   initAudioContext();
@@ -1779,6 +1746,7 @@ async function loadStemFile(stemKey, file){
       audioEl: new Audio(),
       sourceNode: null,
       analyser: audioEngine.ctx.createAnalyser(),
+      gainNode: audioEngine.ctx.createGain(), // lets Solo mute/unmute this stem's audible output without touching playback or the analyser tap feeding the visuals
       freqData: null,
       colEnergy: new Float32Array(GRID_COLS),
       energy: 0,
@@ -1798,13 +1766,94 @@ async function loadStemFile(stemKey, file){
   try{ s.sourceNode.disconnect(); }catch(e){}
   s.sourceNode.connect(s.analyser);
   try{ s.analyser.disconnect(); }catch(e){}
-  s.analyser.connect(audioEngine.ctx.destination);
+  // analyser -> gain -> destination: the analyser taps the full, un-muted signal (so Solo/Mute
+  // never affects what drives the visualization, only what you actually hear), and Solo state
+  // just sets this stem's gain — it keeps playing in sync even while silent, so nothing drifts.
+  s.analyser.connect(s.gainNode);
+  try{ s.gainNode.disconnect(); }catch(e){}
+  s.gainNode.connect(audioEngine.ctx.destination);
+  s.gainNode.gain.value = (audioEngine.soloedStem && audioEngine.soloedStem !== stemKey) ? 0 : 1;
 
   // roughly align to whatever else is already playing
   const playing = STEM_KEYS.map(k => audioEngine.stems[k]).find(o => o && !o.audioEl.paused);
   if(playing) s.audioEl.currentTime = playing.audioEl.currentTime;
 
   await s.audioEl.play();
+}
+
+// Shared by the individual file pickers and the drag-and-drop zone below — loads the file for
+// one stem key and brings the transport UI into the "stems active" state, or toasts on failure.
+async function loadStemFileIntoUi(stemKey, file){
+  try{
+    await loadStemFile(stemKey, file);
+    if(!audioEngine.stemsActive) return; // user switched to a single file/mic while this was loading
+    document.getElementById('audioStatus').textContent = 'No audio source connected.';
+    document.getElementById('audioTransport').style.display = 'none';
+    document.getElementById('micStopBtn').style.display = 'none';
+    document.getElementById('stemLegend').style.display = 'flex';
+    document.getElementById('stemsTransport').style.display = 'flex';
+    document.getElementById('stemsPlayPauseBtn').textContent = 'Pause stems';
+    updateStemsStatusText();
+    updateStemSoloButtons();
+  } catch(err){
+    toast(`Could not load ${STEM_LABELS[stemKey]}`);
+  }
+}
+
+// Toggles isolating one stem's audible output. Clicking the already-soloed stem's button clears
+// the solo (everyone audible again); clicking a different one switches which is isolated. Every
+// stem keeps playing regardless — this only sets gain, so a muted stem stays perfectly in sync
+// and the visualization (which taps the signal before the gain node) keeps reacting to all four.
+function setStemSolo(stemKey){
+  audioEngine.soloedStem = (audioEngine.soloedStem === stemKey) ? null : stemKey;
+  STEM_KEYS.forEach(k => {
+    const s = audioEngine.stems[k];
+    if(!s) return;
+    s.gainNode.gain.value = (!audioEngine.soloedStem || audioEngine.soloedStem === k) ? 1 : 0;
+  });
+  updateStemSoloButtons();
+}
+
+function updateStemSoloButtons(){
+  document.querySelectorAll('.stem-solo-btn').forEach(btn => {
+    const isSoloed = audioEngine.soloedStem === btn.dataset.stem;
+    btn.classList.toggle('accent', isSoloed);
+    btn.classList.toggle('secondary', !isSoloed);
+    btn.textContent = isSoloed ? 'Soloed' : 'Solo';
+  });
+}
+
+// Guesses which stem a dropped file is from its filename (e.g. "song - Vocals.wav" -> 'vocals').
+// Demucs/LALAL.AI/Moises all name their exports along these lines, so this covers the common
+// case; anything that doesn't match a keyword is left for the person to assign by hand instead.
+const STEM_NAME_HINTS = {
+  vocals: ['vocal', 'voice', 'acapella', 'lead'],
+  drums: ['drum', 'perc'],
+  bass: ['bass'],
+  other: ['other', 'instrumental', 'guitar', 'accompaniment', 'music'],
+};
+function guessStemKeyFromFilename(name){
+  const n = name.toLowerCase();
+  for(const key of STEM_KEYS){
+    if(STEM_NAME_HINTS[key].some(hint => n.includes(hint))) return key;
+  }
+  return null;
+}
+
+async function handleDroppedStemFiles(files){
+  const audioFiles = Array.from(files).filter(f => f.type.startsWith('audio/') || /\.(wav|mp3|m4a|flac|ogg|aac)$/i.test(f.name));
+  if(!audioFiles.length){ toast('Drop audio files (Vocals/Drums/Bass/Other)'); return; }
+  const unmatched = [];
+  for(const file of audioFiles){
+    const key = guessStemKeyFromFilename(file.name);
+    if(key) await loadStemFileIntoUi(key, file);
+    else unmatched.push(file.name);
+  }
+  if(unmatched.length){
+    toast(unmatched.length === 1
+      ? `Couldn't tell which stem "${unmatched[0]}" is — use the buttons above for that one`
+      : `Couldn't tell which stems ${unmatched.length} of those files are — use the buttons above for those`);
+  }
 }
 
 function stemsLoadedCount(){
@@ -2339,6 +2388,8 @@ function renderHome(){
       <span style="font-size:12px; font-weight:600; letter-spacing:0.04em; color:var(--ink-soft); text-transform:uppercase; margin-bottom:10px; display:block;">Kinetic sculpture — live 3D view</span>
       <div id="stage">
         <div id="stageViewControls">
+          <button id="shareBtn" title="Copy a link that reproduces this exact mode/shape/speed">Share</button>
+          <button id="recordBtn" title="Record what's on screen as a video clip">● Record</button>
           <button id="autoRotateBtn" title="Toggle the slow ambient spin">Auto-rotate: on</button>
           <button id="stageRecenterBtn" title="Reset camera to the default view">Recenter</button>
           <button id="stageTopBtn" title="Look straight down">Top</button>
@@ -2415,22 +2466,11 @@ function renderHome(){
           </div>
         </div>
         <div class="row" id="audioSilenceWarning" style="display:none; margin-top:4px;">
-          <span class="sliderVal" style="width:auto; text-align:left; color:#F0A868;">Input level has stayed near zero for a while — if you're expecting a YouTube video (or anything else) to drive this, your system audio probably isn't actually routed into the mic yet. See the note above about loopback / a virtual audio cable.</span>
+          <span class="sliderVal" style="width:auto; text-align:left; color:#F0A868;">Input level has stayed near zero for a while — check that your system audio is actually routed into the mic (loopback / a virtual audio cable).</span>
         </div>
 
-        <div class="row" style="border-top:1px solid var(--line); padding-top:12px; margin-top:8px;">
-          <div class="label">Or embed a YouTube video — plays the video here, and starts the microphone to listen for whatever your speakers are playing. Real reactivity needs your computer's own audio routed to a mic input (e.g. Windows "Stereo Mix" or a virtual audio cable) — the browser can't read a YouTube iframe's audio directly, cross-origin.</div>
-          <div class="row" style="margin-top:0;">
-            <input id="youtubeUrlInput" type="text" placeholder="Paste a YouTube URL" style="flex:1; min-width:200px; background:var(--paper-deep); border:1.5px solid var(--line); color:var(--ink); border-radius:7px; padding:10px 12px; font-size:14px;">
-            <button class="btn secondary" id="youtubeLoadBtn">Load video</button>
-          </div>
-          <div id="youtubePlayerWrap" style="display:none; margin-top:10px; position:relative; width:100%; aspect-ratio:16/9; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-deep);">
-            <div id="youtubePlayer" style="width:100%; height:100%;"></div>
-          </div>
-        </div>
-
-        <div class="row" style="margin-top:14px; border-top:1px solid var(--line); padding-top:12px;">
-          <div class="label">Or upload separated stems (run the song through Demucs / LALAL.AI / Moises first)</div>
+        <div class="row" id="stemsDropzone" style="margin-top:14px; border:1.5px dashed var(--line); border-radius:8px; padding:12px; transition:border-color 120ms, background 120ms;">
+          <div class="label">Or upload separated stems (get them from <a href="https://moises.ai" target="_blank" rel="noopener">Moises</a> — free, no install — or Demucs / LALAL.AI). Drag all the files here at once — named things like "Vocals"/"Drums"/"Bass"/"Other" — or pick them one at a time below.</div>
           <div class="group">
             <label class="btn secondary" for="stemInput-vocals">Vocals<input class="stem-input" id="stemInput-vocals" data-stem="vocals" type="file" accept="audio/*" style="display:none;"></label>
             <label class="btn secondary" for="stemInput-drums">Drums<input class="stem-input" id="stemInput-drums" data-stem="drums" type="file" accept="audio/*" style="display:none;"></label>
@@ -2444,11 +2484,11 @@ function renderHome(){
           <button class="btn secondary" id="stemsStopBtn">Stop stems</button>
           <button class="btn secondary" id="stemsForwardBtn" title="Forward 10s">10s ⏩</button>
         </div>
-        <div class="row" id="stemLegend" style="margin-top:8px; display:none;">
-          <span class="sliderVal" style="width:auto;"><span id="legend-vocals" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#E97452;margin-right:5px;"></span>Vocals</span>
-          <span class="sliderVal" style="width:auto;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#7DD3FC;margin-right:5px;"></span>Drums</span>
-          <span class="sliderVal" style="width:auto;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#B98AFF;margin-right:5px;"></span>Bass</span>
-          <span class="sliderVal" style="width:auto;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#8CE99A;margin-right:5px;"></span>Other / guitar</span>
+        <div class="row" id="stemLegend" style="margin-top:8px; display:none; align-items:center;">
+          <span class="sliderVal" style="width:auto; display:inline-flex; align-items:center; gap:6px;"><span id="legend-vocals" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#E97452;"></span>Vocals<button class="btn secondary stem-solo-btn" data-stem="vocals" style="padding:3px 9px; font-size:11px;">Solo</button></span>
+          <span class="sliderVal" style="width:auto; display:inline-flex; align-items:center; gap:6px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#7DD3FC;"></span>Drums<button class="btn secondary stem-solo-btn" data-stem="drums" style="padding:3px 9px; font-size:11px;">Solo</button></span>
+          <span class="sliderVal" style="width:auto; display:inline-flex; align-items:center; gap:6px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#B98AFF;"></span>Bass<button class="btn secondary stem-solo-btn" data-stem="bass" style="padding:3px 9px; font-size:11px;">Solo</button></span>
+          <span class="sliderVal" style="width:auto; display:inline-flex; align-items:center; gap:6px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#8CE99A;"></span>Other / guitar<button class="btn secondary stem-solo-btn" data-stem="other" style="padding:3px 9px; font-size:11px;">Solo</button></span>
         </div>
 
         <div class="row" style="margin-top:4px;">
@@ -2623,12 +2663,6 @@ function renderHome(){
     document.getElementById('audioStatus').textContent = 'No audio source connected.';
     document.getElementById('micStopBtn').style.display = 'none';
   };
-  document.getElementById('youtubeLoadBtn').onclick = ()=>{
-    const url = document.getElementById('youtubeUrlInput').value;
-    const id = extractYouTubeId(url);
-    if(!id){ toast('Could not read a video ID from that URL'); return; }
-    loadYouTubeVideo(id);
-  };
   document.getElementById('audioRewindBtn').onclick = ()=>{
     if(audioEngine.audioEl) audioEngine.audioEl.currentTime = Math.max(0, audioEngine.audioEl.currentTime - 10);
   };
@@ -2649,29 +2683,46 @@ function renderHome(){
     else { audioEngine.audioEl.pause(); e.target.textContent = 'Play'; }
   };
   document.querySelectorAll('.stem-input').forEach(inp=>{
-    inp.onchange = async (e)=>{
+    inp.onchange = (e)=>{
       const file = e.target.files && e.target.files[0];
-      if(!file) return;
-      const key = inp.dataset.stem;
-      try{
-        await loadStemFile(key, file);
-        if(!audioEngine.stemsActive) return; // user switched to a single file/mic while this was loading
-        document.getElementById('audioStatus').textContent = 'No audio source connected.';
-        document.getElementById('audioTransport').style.display = 'none';
-        document.getElementById('micStopBtn').style.display = 'none';
-        document.getElementById('stemLegend').style.display = 'flex';
-        document.getElementById('stemsTransport').style.display = 'flex';
-        document.getElementById('stemsPlayPauseBtn').textContent = 'Pause stems';
-        updateStemsStatusText();
-      } catch(err){
-        toast(`Could not load ${STEM_LABELS[key]}`);
-      }
+      if(file) loadStemFileIntoUi(inp.dataset.stem, file);
     };
   });
+  const stemsDropzone = document.getElementById('stemsDropzone');
+  if(stemsDropzone){
+    let dragDepth = 0; // counts nested dragenter/dragleave pairs so a child element's leave doesn't drop the highlight early
+    stemsDropzone.addEventListener('dragenter', (e)=>{
+      e.preventDefault();
+      dragDepth++;
+      stemsDropzone.style.borderColor = 'var(--accent)';
+      stemsDropzone.style.background = 'rgba(125, 211, 252, 0.06)';
+    });
+    stemsDropzone.addEventListener('dragover', (e)=> e.preventDefault());
+    stemsDropzone.addEventListener('dragleave', (e)=>{
+      e.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if(dragDepth === 0){
+        stemsDropzone.style.borderColor = '';
+        stemsDropzone.style.background = '';
+      }
+    });
+    stemsDropzone.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      dragDepth = 0;
+      stemsDropzone.style.borderColor = '';
+      stemsDropzone.style.background = '';
+      if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+        handleDroppedStemFiles(e.dataTransfer.files);
+      }
+    });
+  }
   document.getElementById('stemsPlayPauseBtn').onclick = (e)=>{
     const nowPlaying = toggleStemsPlayback();
     if(nowPlaying !== undefined) e.target.textContent = nowPlaying ? 'Pause stems' : 'Play stems';
   };
+  document.querySelectorAll('.stem-solo-btn').forEach(btn=>{
+    btn.onclick = ()=> setStemSolo(btn.dataset.stem);
+  });
   document.getElementById('stemsRewindBtn').onclick = ()=>seekStems(-10);
   document.getElementById('stemsForwardBtn').onclick = ()=>seekStems(10);
   document.getElementById('stemsStopBtn').onclick = ()=>{
@@ -2681,11 +2732,20 @@ function renderHome(){
   document.getElementById('resolveTextBtn').onclick = ()=>{
     const v = document.getElementById('textInput').value.trim();
     if(!v){ toast('Type something first'); return; }
-    resolveTo({ type:'text', text: v.toUpperCase() });
+    const spec = { type:'text', text: v.toUpperCase() };
+    engine.manualSpec = spec;
+    resolveTo(spec);
   };
-  document.getElementById('scrambleBtn').onclick = ()=>resolveTo({ type:'chaos' });
+  document.getElementById('scrambleBtn').onclick = ()=>{
+    engine.manualSpec = { type:'chaos' };
+    resolveTo({ type:'chaos' });
+  };
   document.querySelectorAll('.preset-btn').forEach(b=>{
-    b.onclick = ()=>resolveTo({ type:'preset', preset: b.dataset.preset });
+    b.onclick = ()=>{
+      const spec = { type:'preset', preset: b.dataset.preset };
+      engine.manualSpec = spec;
+      resolveTo(spec);
+    };
   });
   document.getElementById('speedSlider').oninput = (e)=>{
     engine.speed = parseFloat(e.target.value);
@@ -2710,6 +2770,20 @@ function renderHome(){
   document.getElementById('stageRecenterBtn').onclick = ()=> setStageView(STAGE_DEFAULT_POS);
   document.getElementById('stageTopBtn').onclick = ()=> setStageView([0, 30, 0.01]); // tiny Z offset avoids OrbitControls gimbal lock straight down
   document.getElementById('stageSideBtn').onclick = ()=> setStageView([30, 2, 0]);
+  document.getElementById('shareBtn').onclick = async ()=>{
+    const url = buildShareUrl();
+    try{
+      await navigator.clipboard.writeText(url);
+      toast('Link copied — reproduces this mode, shape, and speed');
+    } catch(err){
+      // Clipboard permission denied/unavailable (older browser, insecure context, etc.) — fall
+      // back to just showing it so the person can still grab it by hand.
+      window.prompt('Copy this link:', url);
+    }
+  };
+  document.getElementById('recordBtn').onclick = toggleRecording;
+
+  applyUrlState();
 
   updateModeButtons();
   initEngineIfNeeded();
@@ -2738,16 +2812,15 @@ function setMode(m){
   }
 }
 function resetStemsUi(){
-  disconnectStems();
+  disconnectStems(); // also clears audioEngine.soloedStem
   const legend = document.getElementById('stemLegend');
-  const ppBtn = document.getElementById('stemsPlayPauseBtn');
   const transport = document.getElementById('stemsTransport');
   const status = document.getElementById('stemsStatus');
   if(legend) legend.style.display = 'none';
-  if(ppBtn) ppBtn.style.display = 'none';
-  if(transport) transport.style.display = 'none';
+  if(transport) transport.style.display = 'none'; // hides everything inside, including the play/pause button — no need to also hide it individually (that inline override was never cleared when stems reloaded, which is why the button stayed invisible for good after the first reset)
   if(status) status.textContent = '';
   document.querySelectorAll('.stem-input').forEach(inp => inp.value = '');
+  updateStemSoloButtons();
 }
 
 function updateStemsStatusText(){
@@ -2772,6 +2845,137 @@ function updateModeButtons(){
   a.className = 'btn ' + (engine.mode === 'ambient' ? '' : 'secondary');
   m.className = 'btn ' + (engine.mode === 'manual' ? '' : 'secondary');
   u.className = 'btn ' + (engine.mode === 'audio' ? '' : 'secondary');
+}
+
+/* ================= Share link =================
+   Captures mode + speed + turbulence, and (Manual mode only) the resolved text/preset, into URL
+   query params. Audio mode can't carry an actual audio file through a link, so a shared audio-mode
+   link just lands the visitor on the Audio panel ready to pick a source — same as if a
+   sound-driven look were expected to always start fresh each session, since sound comes from
+   whatever *they* choose to play, not from what you had loaded. */
+function buildShareUrl(){
+  const params = new URLSearchParams();
+  params.set('mode', engine.mode);
+  params.set('speed', engine.speed.toFixed(1));
+  params.set('turbulence', engine.turbulence.toFixed(1));
+  if(engine.mode === 'manual' && engine.manualSpec){
+    if(engine.manualSpec.type === 'text') params.set('text', engine.manualSpec.text);
+    else if(engine.manualSpec.type === 'preset') params.set('preset', engine.manualSpec.preset);
+    // type 'chaos' (scrambled) needs no extra param — landing in Manual with neither text nor
+    // preset set already reads as scrambled, since nothing else has been resolved yet.
+  }
+  const url = new URL(location.href);
+  url.search = params.toString();
+  return url.toString();
+}
+
+function applyUrlState(){
+  const params = new URLSearchParams(location.search);
+  if(![...params.keys()].length) return; // plain URL, no shared state to restore — leave the defaults
+
+  const mode = params.get('mode');
+  const speed = parseFloat(params.get('speed'));
+  const turbulence = parseFloat(params.get('turbulence'));
+  const text = params.get('text');
+  const preset = params.get('preset');
+
+  if(!isNaN(speed)){
+    engine.speed = Math.min(2.5, Math.max(0.2, speed));
+    const slider = document.getElementById('speedSlider'), val = document.getElementById('speedVal');
+    if(slider) slider.value = engine.speed;
+    if(val) val.textContent = engine.speed.toFixed(1);
+  }
+  if(!isNaN(turbulence)){
+    engine.turbulence = Math.min(2, Math.max(0, turbulence));
+    const slider = document.getElementById('turbSlider'), val = document.getElementById('turbVal');
+    if(slider) slider.value = engine.turbulence;
+    if(val) val.textContent = engine.turbulence.toFixed(1);
+  }
+
+  if(mode === 'manual' || mode === 'audio') setMode(mode); // ambient is already the default, nothing to switch
+
+  const applyManualSpec = ()=>{
+    if(mode !== 'manual') return;
+    if(text){
+      document.getElementById('textInput').value = text;
+      engine.manualSpec = { type:'text', text: text.toUpperCase() };
+      resolveTo(engine.manualSpec);
+    } else if(preset && MANUAL_PRESET_KEYS.includes(preset)){
+      engine.manualSpec = { type:'preset', preset };
+      resolveTo(engine.manualSpec);
+    }
+  };
+  if(engine.ready) applyManualSpec();
+  else {
+    // engine.ready flips once Three.js finishes its async import+setup (initEngineIfNeeded, called
+    // right after this) — poll rather than thread a callback through that whole chain for one flag.
+    const check = setInterval(()=>{
+      if(engine.ready){ clearInterval(check); applyManualSpec(); }
+    }, 50);
+  }
+}
+
+/* ================= Recording =================
+   captureStream() + MediaRecorder on the existing WebGL canvas — no server, no extra rendering
+   pass, just grabbing frames as they're already being drawn. Downloads a .webm on stop. */
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordTimerInterval = null;
+let recordStartTime = 0;
+
+function pickRecordingMimeType(){
+  const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  return candidates.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || null;
+}
+
+function toggleRecording(){
+  if(mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
+  else startRecording();
+}
+
+function startRecording(){
+  if(!three || !three.renderer){ toast('Nothing to record yet'); return; }
+  if(!window.MediaRecorder){ toast("This browser can't record video (try Chrome or Edge)"); return; }
+  const mimeType = pickRecordingMimeType();
+  if(!mimeType){ toast("This browser can't record video (try Chrome or Edge)"); return; }
+
+  const stream = three.renderer.domElement.captureStream(30);
+  recordedChunks = [];
+  try{
+    mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+  } catch(err){
+    toast('Could not start recording');
+    return;
+  }
+  mediaRecorder.ondataavailable = (e)=>{ if(e.data && e.data.size) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = ()=>{
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `murmur-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1000);
+    toast('Clip saved');
+  };
+  mediaRecorder.start();
+  recordStartTime = performance.now();
+  const btn = document.getElementById('recordBtn');
+  recordTimerInterval = setInterval(()=>{
+    const secs = Math.floor((performance.now() - recordStartTime) / 1000);
+    const mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
+    if(btn) btn.textContent = `■ Stop (${mm}:${ss})`;
+  }, 250);
+}
+
+function stopRecording(){
+  if(mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+  clearInterval(recordTimerInterval);
+  recordTimerInterval = null;
+  const btn = document.getElementById('recordBtn');
+  if(btn) btn.textContent = '● Record';
 }
 
 /* ================= Boot ================= */
