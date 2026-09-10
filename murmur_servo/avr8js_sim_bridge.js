@@ -516,7 +516,7 @@ function respawnParticle(p, energy) {
   // Launch mostly straight up out of the canister mouth, like a mortar shot — energy sets how
   // hard it fires, gravity (applied per-frame in animate()) bends the flight into a real arc
   // instead of a radial burst. Small lateral scatter so it isn't a single ruler-straight line.
-  // No baseline anymore — per user request, matching the embedded preview: a genuinely idle
+  // No baseline anymore — intentional, matching the embedded preview: a genuinely idle
   // channel (energy 0) launches nothing at all. But a plain linear scale from 0 made moderate
   // real energy (~0.3-0.4, the typical range during real activity) nearly invisible at normal
   // viewing scale — confirmed live via a full-canvas pixel scan on the embedded preview: particles
