@@ -919,8 +919,8 @@ function handlePortEdges(port, value, oldValue){
 let ready = false;
 const SUBSTEP_CYCLES = 200, MAX_CATCHUP_SEC = 0.01, MHZ = 16e6;
 // MAX_CATCHUP_SEC was 0.25 — that let a single tick() call try to simulate up to 4,000,000 AVR
-// instructions in a row before returning. Confirmed live (via Claude in Chrome, injecting a
-// debug-introspection build of this exact source into a fresh isolated Worker) that this JS AVR
+// instructions in a row before returning. Confirmed live (injecting a debug-introspection build
+// of this exact source into a fresh isolated Worker) that this JS AVR
 // emulation cannot actually execute that many instructions in anything close to real time inside
 // a Worker: rxQueue was observed GROWING over real seconds even while usart.rxBusy sat false the
 // whole time, meaning tick() itself was only getting called roughly once every 400-600ms (each
@@ -1287,7 +1287,7 @@ function ensureHwSimScene(){
   // has no tone mapping at all, while this scene's exposure was cut hard (down to 0.32 across
   // several rounds) to fix the particle white-blowout — the identical material renders at roughly
   // a third the brightness here. Tried `material.toneMapped = false` to decouple it from that
-  // exposure entirely — confirmed LIVE, via Claude in Chrome, that this does NOT actually work in
+  // exposure entirely — confirmed LIVE that this does NOT actually work in
   // this renderer/three.js combination: sampling the rendered pixel color directly (gl.readPixels)
   // while sweeping toneMappingExposure showed the "detached" material's brightness still tracking
   // exposure exactly like everything else. Rather than fight that, embraced it: emissiveIntensity
@@ -1380,9 +1380,10 @@ function ensureHwSimScene(){
     // Launch mostly straight up, like a mortar shot — energy sets how hard it fires, gravity
     // (applied per-frame in updateHwSimulator) bends the flight into a real arc rather than a
     // radial burst. Small lateral scatter so it doesn't look like a single ruler-straight line.
-    // No baseline anymore — per user request, a genuinely idle channel (energy 0) launches
-    // nothing at all. But a plain linear scale from 0 made moderate real energy (~0.3-0.4, which
-    // turned out to be the typical range during real Ambient/Audio activity) look nearly invisible
+    // No baseline anymore — intentional: a genuinely idle channel (energy 0) should launch
+    // nothing at all, not a small decorative shimmer. But a plain linear scale from 0 made
+    // moderate real energy (~0.3-0.4, which turned out to be the typical range during real
+    // Ambient/Audio activity) look nearly invisible
     // at normal viewing scale — confirmed live via a full-canvas pixel scan: particles genuinely
     // were rendering, just too small/sparse to read as "alive." Switched to a sqrt curve: still
     // exactly 0 at energy 0, but rises much faster at low-to-moderate energy (sqrt(0.4)≈0.63) so
@@ -1564,8 +1565,8 @@ function updateHwSimulator(now, dt){
     const energy = Math.min(1, hwSim.emitterEnergy[i] * moodMul + flash * 0.8);
 
     // Marker glow scales purely with real deviation — at energy 0 it's fully dark and static,
-    // no time-based idle bob anymore (removed per user request: an idle channel should show
-    // nothing until there's real activity, not a small decorative shimmer). Ring scale uses the
+    // no time-based idle bob anymore (intentional: an idle channel should show nothing until
+    // there's real activity, not a small decorative shimmer). Ring scale uses the
     // same sqrt curve as the particles below, for the same reason: linear-from-zero made moderate
     // real energy look barely different from idle.
     hwSim.markerMats[i].emissiveIntensity = deviation * 0.9 + flash * 1.4;
