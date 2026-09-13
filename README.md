@@ -35,4 +35,5 @@ MURMUR is built on these open-source projects:
 - [avr8js](https://github.com/wokwi/avr8js) (MIT) by Wokwi — runs the real compiled `murmur_servo.ino` firmware directly, in-browser (via the embedded preview's Web Worker) and in the standalone `avr8js_sim_bridge.js` bridge script, rather than approximating servo behavior.
 - [ws](https://github.com/websockets/ws) (MIT) — the WebSocket server behind `avr8js_sim_bridge.js`'s live bridge and dashboard.
 
-Joe.K · axisbim.io
+---
+Joe.K · [axisbim.io](https://axisbim.io)
